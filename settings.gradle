@@ -36,4 +36,3 @@ rootProject.name = 'emi_recipeforest'
 include('common')
 include('fabric')
 include('neoforge')
-//include('forge')
