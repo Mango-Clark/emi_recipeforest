@@ -17,11 +17,129 @@ neoForge {
 }
 
 dependencies {
-    compileOnly "dev.emi:emi-xplat-mojmap:${emi_version}:api"
+    compileOnly "dev.emi:emi-xplat-mojmap:${emi_version}"
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    compileOnly group: 'org.ow2.asm', name: 'asm-tree', version: '9.7'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
     compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+    testImplementation platform('org.junit:junit-bom:5.10.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+}
+
+def emiCompatibilityContracts = [
+        'dev.emi.emi.bom.BoM': [
+                [token: ' tree;', descriptor: 'Ldev/emi/emi/bom/MaterialTree;', access: 'public static'],
+                [token: ' craftingMode;', descriptor: 'Z', access: 'public static'],
+                [token: ' setGoal(', descriptor: '(Ldev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public static']
+        ],
+        'dev.emi.emi.widget.RecipeTreeButtonWidget': [
+                [token: 'RecipeTreeButtonWidget(', descriptor: '(IILdev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public'],
+                [token: ' mouseClicked(', descriptor: '(III)Z', access: 'public'],
+                [token: ' getTooltip(', descriptor: '(II)Ljava/util/List;', access: 'public']
+        ],
+        'dev.emi.emi.runtime.EmiReloadManager': [
+                [token: ' clear(', descriptor: '()V', access: 'public static'],
+                [token: ' reload(', descriptor: '()V', access: 'public static']
+        ],
+        'dev.emi.emi.runtime.EmiFavorites': [
+                [token: ' updateSynthetic(', descriptor: '(Ldev/emi/emi/api/recipe/EmiPlayerInventory;)V', access: 'public static']
+        ],
+        'dev.emi.emi.runtime.EmiSidebars': [
+                [token: ' getStacks(', descriptor: '(Ldev/emi/emi/config/SidebarType;)Ljava/util/List;', access: 'public static']
+        ],
+        'dev.emi.emi.screen.widget.EmiSearchWidget': [
+                [token: ' keyPressed(', descriptor: '(III)Z', access: 'public']
+        ],
+        'dev.emi.emi.screen.EmiScreenManager': [
+                [token: ' mouseReleased(', descriptor: '(DDI)Z', access: 'public static'],
+                [token: ' mouseDragged(', descriptor: '(DDIDD)Z', access: 'public static'],
+                [token: ' repopulatePanels(', descriptor: '(Ldev/emi/emi/config/SidebarType;)V', access: 'public static'],
+                [token: ' pressedStack;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static'],
+                [token: ' draggedStack;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static'],
+                [token: ' search;', descriptor: 'Ldev/emi/emi/screen/widget/EmiSearchWidget;', access: 'public static']
+        ],
+        'dev.emi.emi.runtime.EmiPersistentData': [
+                [token: ' load(', descriptor: '()V', access: 'public static']
+        ],
+        'dev.emi.emi.runtime.EmiFavorite$Synthetic': [
+                [token: 'EmiFavorite$Synthetic(', descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;JJ)V', access: 'public']
+        ]
+]
+
+tasks.register('verifyEmiCompatibilityMatrix') {
+    group = 'verification'
+    description = 'Resolves EMI 1.1.13-1.1.24 and verifies RecipeForest JVM contracts.'
+
+    doLast {
+        def executableName = System.getProperty('os.name').toLowerCase().contains('windows') ? 'javap.exe' : 'javap'
+        def javap = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(java_version)
+        }.get().metadata.installationPath.file("bin/${executableName}").asFile
+
+        (13..24).each { patch ->
+            def version = "1.1.${patch}+1.21.1"
+            def artifact = configurations.detachedConfiguration(
+                    dependencies.create("dev.emi:emi-xplat-mojmap:${version}"))
+            artifact.transitive = false
+            def jar = artifact.singleFile
+            def contracts = emiCompatibilityContracts.collectEntries { owner, members ->
+                [(owner): members.collect { new LinkedHashMap(it) }]
+            }
+            contracts['dev.emi.emi.runtime.EmiFavorite$Synthetic'] << [
+                    token: 'EmiFavorite$Synthetic(',
+                    descriptor: patch >= 21
+                            ? '(Ldev/emi/emi/api/recipe/EmiRecipe;JJJI)V'
+                            : '(Ldev/emi/emi/api/recipe/EmiRecipe;JJI)V',
+                    access: 'public'
+            ]
+            if (patch >= 22) {
+                contracts['dev.emi.emi.bom.MaterialNode'] = [[
+                        token: ' catalyst;', descriptor: 'Z', access: 'public'
+                ]]
+            } else {
+                contracts['dev.emi.emi.bom.TreeCost'] = [[
+                        token: ' isCatalyst(',
+                        descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;)Z',
+                        access: 'public static'
+                ]]
+            }
+
+            contracts.each { owner, members ->
+                def output = new ByteArrayOutputStream()
+                def result = project.exec {
+                    commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-s', owner
+                    standardOutput = output
+                    errorOutput = output
+                    ignoreExitValue = true
+                }
+                if (result.exitValue != 0) {
+                    throw new GradleException("EMI ${version}: missing class ${owner}: ${output.toString('UTF-8')}")
+                }
+                def lines = output.toString('UTF-8').readLines()
+                members.each { member ->
+                    def found = (0..<lines.size()).any { index ->
+                        def signature = lines[index].trim()
+                        if (!signature.startsWith(member.access) || !signature.contains(member.token)) {
+                            return false
+                        }
+                        def descriptorLine = ((index + 1)..<lines.size()).find { !lines[it].trim().isEmpty() }
+                        return descriptorLine != null
+                                && lines[descriptorLine].trim() == "descriptor: ${member.descriptor}"
+                    }
+                    if (!found) {
+                        throw new GradleException("EMI ${version}: missing or incompatible ${owner}"
+                                + " ${member.token.trim()} descriptor ${member.descriptor}")
+                    }
+                }
+            }
+            logger.lifecycle("Verified EMI ${version}")
+        }
+    }
 }
 
 configurations {

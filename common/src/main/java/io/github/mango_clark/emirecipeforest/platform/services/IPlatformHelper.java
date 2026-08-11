@@ -1,5 +1,7 @@
 package io.github.mango_clark.emirecipeforest.platform.services;
 
+import java.util.Optional;
+
 public interface IPlatformHelper {
 
     /**
@@ -16,6 +18,14 @@ public interface IPlatformHelper {
      * @return True if the mod is loaded, false otherwise.
      */
     boolean isModLoaded(String modId);
+
+    /**
+     * Gets the declared version of a loaded mod.
+     *
+     * @param modId The id of the mod whose version should be queried.
+     * @return The declared version, or an empty optional when the mod is not loaded.
+     */
+    Optional<String> getModVersion(String modId);
 
     /**
      * Check if the game is currently in a development environment.
