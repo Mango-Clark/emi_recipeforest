@@ -38,7 +38,16 @@ def emiCompatibilityContracts = [
                 [token: ' setGoal(', descriptor: '(Ldev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public static']
         ],
         'dev.emi.emi.bom.MaterialTree': [
+                [token: 'MaterialTree(', descriptor: '(Ldev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public'],
+                [token: ' goal;', descriptor: 'Ldev/emi/emi/bom/MaterialNode;', access: 'public'],
+                [token: ' resolutions;', descriptor: 'Ljava/util/Map;', access: 'public'],
+                [token: ' batches;', descriptor: 'J', access: 'public'],
                 [token: ' addResolution(', descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public']
+        ],
+        'dev.emi.emi.bom.MaterialNode': [
+                [token: ' recipe;', descriptor: 'Ldev/emi/emi/api/recipe/EmiRecipe;', access: 'public'],
+                [token: ' children;', descriptor: 'Ljava/util/List;', access: 'public'],
+                [token: ' state;', descriptor: 'Ldev/emi/emi/bom/FoldState;', access: 'public']
         ],
         'dev.emi.emi.widget.RecipeTreeButtonWidget': [
                 [token: 'RecipeTreeButtonWidget(', descriptor: '(IILdev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public'],
@@ -47,7 +56,8 @@ def emiCompatibilityContracts = [
         ],
         'dev.emi.emi.runtime.EmiReloadManager': [
                 [token: ' clear(', descriptor: '()V', access: 'public static'],
-                [token: ' reload(', descriptor: '()V', access: 'public static']
+                [token: ' reload(', descriptor: '()V', access: 'public static'],
+                [token: ' isLoaded(', descriptor: '()Z', access: 'public static']
         ],
         'dev.emi.emi.runtime.EmiFavorites': [
                 [token: ' updateSynthetic(', descriptor: '(Ldev/emi/emi/api/recipe/EmiPlayerInventory;)V', access: 'public static']
@@ -59,11 +69,30 @@ def emiCompatibilityContracts = [
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public']
         ],
         'dev.emi.emi.screen.ConfigScreen': [
+                [token: ' list;', descriptor: 'Ldev/emi/emi/screen/widget/config/ListWidget;', access: 'public'],
+                [token: ' search;', descriptor: 'Ldev/emi/emi/screen/widget/config/ConfigSearch;', access: 'private'],
                 [token: ' init(', descriptor: '()V', access: 'protected'],
-                [token: ' render(', descriptor: '(Lnet/minecraft/client/gui/GuiGraphics;IIF)V', access: 'public'],
-                [token: ' mouseClicked(', descriptor: '(DDI)Z', access: 'public'],
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public'],
                 [token: ' keyReleased(', descriptor: '(III)Z', access: 'public']
+        ],
+        'dev.emi.emi.screen.widget.config.ListWidget': [
+                [token: ' children(', descriptor: '()Ljava/util/List;', access: 'public'],
+                [token: ' addEntry(', descriptor: '(Ldev/emi/emi/screen/widget/config/ListWidget$Entry;)I', access: 'public']
+        ],
+        'dev.emi.emi.screen.widget.config.GroupNameWidget': [
+                [token: 'GroupNameWidget(', descriptor: '(Ljava/lang/String;Lnet/minecraft/network/chat/Component;)V', access: 'public'],
+                [token: ' id;', descriptor: 'Ljava/lang/String;', access: 'public'],
+                [token: ' children;', descriptor: 'Ljava/util/List;', access: 'public'],
+                [token: ' collapsed;', descriptor: 'Z', access: 'public']
+        ],
+        'dev.emi.emi.screen.widget.config.ConfigEntryWidget': [
+                [token: 'ConfigEntryWidget(', descriptor: '(Lnet/minecraft/network/chat/Component;Ljava/util/List;Ljava/util/function/Supplier;I)V', access: 'public'],
+                [token: ' setChildren(', descriptor: '(Ljava/util/List;)V', access: 'public'],
+                [token: ' update(', descriptor: '(IIII)V', access: 'public'],
+                [token: ' parentGroups;', descriptor: 'Ljava/util/List;', access: 'public']
+        ],
+        'dev.emi.emi.screen.widget.config.ConfigSearch': [
+                [token: ' getSearch(', descriptor: '()Ljava/lang/String;', access: 'public']
         ],
         'dev.emi.emi.screen.RecipeScreen': [
                 [token: 'RecipeScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;Ljava/util/Map;)V', access: 'public'],
@@ -72,7 +101,34 @@ def emiCompatibilityContracts = [
         ],
         'dev.emi.emi.api.EmiApi': [
                 [token: ' viewRecipeTree(', descriptor: '()V', access: 'public static'],
-                [token: ' getHandledScreen(', descriptor: '()Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;', access: 'public static']
+                [token: ' getHandledScreen(', descriptor: '()Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;', access: 'public static'],
+                [token: ' getRecipeManager(', descriptor: '()Ldev/emi/emi/api/recipe/EmiRecipeManager;', access: 'public static']
+        ],
+        'dev.emi.emi.api.recipe.EmiRecipeManager': [
+                [token: ' getRecipesByOutput(', descriptor: '(Ldev/emi/emi/api/stack/EmiStack;)Ljava/util/List;', access: 'public'],
+                [token: ' getRecipe(', descriptor: '(Lnet/minecraft/resources/ResourceLocation;)Ldev/emi/emi/api/recipe/EmiRecipe;', access: 'public']
+        ],
+        'dev.emi.emi.api.stack.serializer.EmiIngredientSerializer': [
+                [token: ' getSerialized(', descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;)Lcom/google/gson/JsonElement;', access: 'public static'],
+                [token: ' getDeserialized(', descriptor: '(Lcom/google/gson/JsonElement;)Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static']
+        ],
+        'dev.emi.emi.api.recipe.EmiResolutionRecipe': [
+                [token: 'EmiResolutionRecipe(', descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/stack/EmiStack;)V', access: 'public'],
+                [token: ' stack;', descriptor: 'Ldev/emi/emi/api/stack/EmiStack;', access: 'public']
+        ],
+        'dev.emi.emi.api.recipe.EmiRecipe': [
+                [token: ' getId(', descriptor: '()Lnet/minecraft/resources/ResourceLocation;', access: 'public'],
+                [token: ' supportsRecipeTree(', descriptor: '()Z', access: 'public']
+        ],
+        'dev.emi.emi.api.stack.EmiIngredient': [
+                [token: ' isEmpty(', descriptor: '()Z', access: 'public'],
+                [token: ' getEmiStacks(', descriptor: '()Ljava/util/List;', access: 'public']
+        ],
+        'dev.emi.emi.EmiPort': [
+                [token: ' id(', descriptor: '(Ljava/lang/String;)Lnet/minecraft/resources/ResourceLocation;', access: 'public static']
+        ],
+        'dev.emi.emi.EmiUtil': [
+                [token: ' getPreferredRecipe(', descriptor: '(Ljava/util/List;Ldev/emi/emi/api/recipe/EmiPlayerInventory;Z)Ldev/emi/emi/api/recipe/EmiRecipe;', access: 'public static']
         ],
         'dev.emi.emi.screen.BoMScreen': [
                 [token: 'BoMScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;)V', access: 'public'],
@@ -96,7 +152,8 @@ def emiCompatibilityContracts = [
                 [token: ' lastMouseY;', descriptor: 'I', access: 'public static']
         ],
         'dev.emi.emi.input.EmiInput': [
-                [token: ' getCurrentModifiers(', descriptor: '()I', access: 'public static']
+                [token: ' getCurrentModifiers(', descriptor: '()I', access: 'public static'],
+                [token: ' SHIFT_MASK;', descriptor: 'I', access: 'public static']
         ],
         'dev.emi.emi.api.stack.EmiStackInteraction': [
                 [token: ' isEmpty(', descriptor: '()Z', access: 'public'],

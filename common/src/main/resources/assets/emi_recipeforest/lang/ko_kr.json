@@ -17,6 +17,7 @@
   "screen.emi_recipeforest.settings.quantity_mode.text": "텍스트",
   "screen.emi_recipeforest.settings.forest_key": "포레스트 키",
   "screen.emi_recipeforest.settings.forest_key.capture": "키를 누르세요...",
+  "screen.emi_recipeforest.settings.forest_key.conflict_r": "R은 EMI 예약 키입니다",
   "screen.emi_recipeforest.settings.forest_key.reset": "초기화",
   "screen.emi_recipeforest.settings.box_enabled": "박스 묶음",
   "screen.emi_recipeforest.settings.stacks_per_box": "박스당 스택: %s",

@@ -1,5 +1,6 @@
 package io.github.mango_clark.emirecipeforest.mixin;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import dev.emi.emi.EmiUtil;
@@ -24,6 +25,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -51,7 +53,9 @@ public abstract class EmiScreenManagerMixin {
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private static void recipeForest$addHoveredRecipeToForest(int keyCode, int scanCode, int modifiers,
             CallbackInfoReturnable<Boolean> cir) {
-        if (keyCode != ForestBookmarks.getForestKeyCode() || EmiInput.getCurrentModifiers() != 0
+        int currentModifiers = EmiInput.getCurrentModifiers();
+        if (keyCode == GLFW.GLFW_KEY_R || keyCode != ForestBookmarks.getForestKeyCode()
+                || (currentModifiers & ~EmiInput.SHIFT_MASK) != 0
                 || EmiApi.getHandledScreen() == null || recipeForest$hasFocusedTextField()) {
             return;
         }
@@ -62,8 +66,12 @@ public abstract class EmiScreenManagerMixin {
             return;
         }
         EmiRecipe recipe = hovered.getRecipeContext();
-        if (recipe == null && lastPlayerInventory != null) {
-            recipe = EmiUtil.getPreferredRecipe(hovered.getStack(), lastPlayerInventory, false);
+        if ((recipe == null || !recipe.supportsRecipeTree()) && lastPlayerInventory != null) {
+            LinkedHashSet<EmiRecipe> candidates = new LinkedHashSet<>();
+            for (EmiStack stack : hovered.getStack().getEmiStacks()) {
+                candidates.addAll(EmiApi.getRecipeManager().getRecipesByOutput(stack));
+            }
+            recipe = EmiUtil.getPreferredRecipe(List.copyOf(candidates), lastPlayerInventory, false);
         }
         if (recipe == null || !recipe.supportsRecipeTree()) {
             return;
