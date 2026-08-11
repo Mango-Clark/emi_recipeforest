@@ -10,10 +10,12 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
@@ -50,6 +52,7 @@ import dev.emi.emi.registry.EmiStackList;
 import dev.emi.emi.runtime.EmiDrawContext;
 import dev.emi.emi.runtime.EmiFavorites;
 import dev.emi.emi.runtime.EmiHistory;
+import dev.emi.emi.screen.BoMScreen;
 import dev.emi.emi.screen.StackBatcher;
 import dev.emi.emi.screen.StackBatcher.Batchable;
 import dev.emi.emi.screen.RecipeScreen;
@@ -59,13 +62,26 @@ import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.compat.EmiCompatibility;
 import io.github.mango_clark.emirecipeforest.forest.ForestCosts;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
+import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay;
+import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay.DisplayMode;
 
-public class ForestScreen extends Screen {
+public class ForestScreen extends BoMScreen {
 	private static final int NODE_WIDTH = 30;
 	private static final int NODE_HORIZONTAL_SPACING = 8;
 	private static final int NODE_VERTICAL_SPACING = 20;
 	private static final int COST_HORIZONTAL_SPACING = 8;
 	private static final int ROOT_CELL_SIZE = 20;
+	private static final int ROOT_PANEL_MARGIN = 4;
+	private static final int ROOT_PANEL_HEADER_HEIGHT = 26;
+	private static final int ROOT_PANEL_FOOTER_HEIGHT = 22;
+	private static final int ROOT_LIST_ROW_HEIGHT = 24;
+	private static final int ROOT_LIST_CONTROL_WIDTH = 12;
+	private static final int ROOT_LIST_CONTROL_COUNT = 5;
+	private static final ResourceLocation QUANTITY_UNITS = EmiPort.id("emi_recipeforest",
+		"textures/gui/quantity_units.png");
+	private static final ResourceLocation RECIPE_FOREST_ICON = EmiPort.id("emi_recipeforest",
+		"textures/gui/recipe_forest_icon.png");
+	private static final ThreadLocal<Boolean> OPENING_FOREST = ThreadLocal.withInitial(() -> false);
 	private static StackBatcher batcher = new StackBatcher();
 	private static int zoom = 0;
 	private Bounds batches = new Bounds(-24, -50, 48, 26);
@@ -73,31 +89,41 @@ public class ForestScreen extends Screen {
 	private Bounds help = new Bounds(0, 0, 16, 16);
 	private Bounds previousPage = Bounds.EMPTY;
 	private Bounds nextPage = Bounds.EMPTY;
-	private Bounds settings = Bounds.EMPTY;
+	private Bounds rootLayoutToggle = Bounds.EMPTY;
 	private double offX, offY;
 	private List<Node> nodes = Lists.newArrayList();
 	private List<Cost> costs = Lists.newArrayList();
 	private EmiPlayerInventory playerInv;
 	private boolean hasRemainders = false;;
-	public Screen old;
 	private int page;
+	private int rootListScroll;
 	private int nodeWidth = 0;
 	private int nodeHeight = 0;
 	private int lastMouseX, lastMouseY;
 	private double scrollAcc = 0;
+	private boolean rootPanelDrag;
 
-	public ForestScreen(Screen old) {
-		super(EmiPort.translatable("screen.emi.recipe_tree"));
-		this.old = old;
+	public ForestScreen(AbstractContainerScreen<?> old) {
+		super(old);
 	}
 
-	/** Opens the forest while preserving the current screen as its return target. */
+	/** Opens the forest through EMI's BoM screen factory while preserving its handled-screen context. */
 	public static void open() {
-		Minecraft client = Minecraft.getInstance();
-		client.setScreen(new ForestScreen(client.screen));
+		OPENING_FOREST.set(true);
+		try {
+			EmiApi.viewRecipeTree();
+		} finally {
+			OPENING_FOREST.remove();
+		}
+	}
+
+	/** Used by the EMI screen factory mixin during the synchronous {@link #open()} call. */
+	public static boolean isForestOpenRequested() {
+		return OPENING_FOREST.get();
 	}
 
 	public void init() {
+		ForestManager.cancelPendingResolution();
 		if (BoM.tree != null) {
 			offY = height / -3;
 		} else {
@@ -107,15 +133,24 @@ public class ForestScreen extends Screen {
 	}
 
 	public void recalculateTree() {
-		help = new Bounds(width - 18, height - 18, 16, 16);
+		help = new Bounds(Math.max(2, rootPanelLeft() - 18), height - 18, 16, 16);
 		int pageCount = Math.max(1, (ForestManager.size() + rootsPerPage() - 1) / rootsPerPage());
 		page = Mth.clamp(page, 0, pageCount - 1);
-		int rootLeft = (width - rootColumns() * ROOT_CELL_SIZE) / 2;
-		previousPage = new Bounds(rootLeft - 20, 18, 16, 16);
-		nextPage = new Bounds(rootLeft + rootColumns() * ROOT_CELL_SIZE + 4, 18, 16, 16);
-		settings = new Bounds(2, Math.max(2, height - 18), 16, 16);
+		if (rootPanelHasContent()) {
+			int panelLeft = rootPanelLeft();
+			int panelBottom = rootPanelTop() + rootPanelHeight();
+			previousPage = new Bounds(panelLeft + 4, panelBottom - 19, 16, 16);
+			nextPage = new Bounds(panelLeft + rootPanelWidth() - 20, panelBottom - 19, 16, 16);
+			rootLayoutToggle = new Bounds(panelLeft + 24, rootPanelTop() + 4,
+				Math.max(0, rootPanelWidth() - 28), Math.min(18, Math.max(0, rootPanelHeight() - 8)));
+		} else {
+			previousPage = Bounds.EMPTY;
+			nextPage = Bounds.EMPTY;
+			rootLayoutToggle = Bounds.EMPTY;
+		}
+		clampRootListScroll();
 		if (BoM.tree != null) {
-			TreeVolume volume = addNewNodes(BoM.tree.goal, BoM.tree.batches, 1, 0, ChanceState.DEFAULT);
+			TreeVolume volume = forest$addNewNodes(BoM.tree.goal, BoM.tree.batches, 1, 0, ChanceState.DEFAULT);
 			nodes = volume.nodes;
 			int horizontalOffset = (volume.getMaxRight() + volume.getMinLeft()) / 2;
 			for (Node node : volume.nodes) {
@@ -169,7 +204,7 @@ public class ForestScreen extends Screen {
 					}
 				}
 				costs.add(cost);
-				costX += 16 + COST_HORIZONTAL_SPACING + EmiRenderHelper.getAmountOverflow(cost.getAmountText());
+				costX += 16 + COST_HORIZONTAL_SPACING + cost.getReservedAmountOverflow();
 			}
 			int costOffset = (costX - COST_HORIZONTAL_SPACING) / 2;
 			for (Cost cost : costs) {
@@ -196,7 +231,7 @@ public class ForestScreen extends Screen {
 				}
 				Cost cost = new Cost(node, remainderX, cy, true);
 				remainders.add(cost);
-				remainderX += 16 + COST_HORIZONTAL_SPACING + EmiRenderHelper.getAmountOverflow(cost.getAmountText());
+				remainderX += 16 + COST_HORIZONTAL_SPACING + cost.getReservedAmountOverflow();
 			}
 			costOffset = (remainderX - COST_HORIZONTAL_SPACING) / 2;
 			for (Cost cost : remainders) {
@@ -220,21 +255,66 @@ public class ForestScreen extends Screen {
 	}
 
 	private int rootColumns() {
-		int available = Math.max(1, (width - 48) / ROOT_CELL_SIZE);
+		int available = Math.max(1, (rootPanelWidth() - 8) / ROOT_CELL_SIZE);
 		return Math.max(1, Math.min(ForestBookmarks.getRootGridColumns(), available));
 	}
 
 	private int rootRows() {
-		int available = Math.max(1, (height - 96) / ROOT_CELL_SIZE);
+		int available = Math.max(1,
+			(rootPanelHeight() - ROOT_PANEL_HEADER_HEIGHT - ROOT_PANEL_FOOTER_HEIGHT) / ROOT_CELL_SIZE);
 		return Math.max(1, Math.min(ForestBookmarks.getRootGridRows(), available));
 	}
 
+	private int rootPanelWidth() {
+		int available = Math.max(0, width - ROOT_PANEL_MARGIN * 2);
+		return Math.min(available, Math.min(192, Math.max(100, width / 3)));
+	}
+
+	private int rootPanelLeft() {
+		return Math.max(0, width - rootPanelWidth() - ROOT_PANEL_MARGIN);
+	}
+
+	private int rootPanelTop() {
+		return Math.min(ROOT_PANEL_MARGIN, Math.max(0, height - rootPanelHeight()));
+	}
+
 	private int rootPanelHeight() {
-		return rootRows() * ROOT_CELL_SIZE + 8;
+		return Math.max(0, height - ROOT_PANEL_MARGIN * 2);
+	}
+
+	private boolean rootPanelHasContent() {
+		return rootPanelWidth() >= ROOT_LIST_CONTROL_WIDTH * ROOT_LIST_CONTROL_COUNT + 8
+			&& rootPanelHeight() > ROOT_PANEL_HEADER_HEIGHT + ROOT_PANEL_FOOTER_HEIGHT;
+	}
+
+	private int contentCenterX() {
+		return rootPanelLeft() / 2;
 	}
 
 	private int contentCenterY() {
-		return height / 2 + rootPanelHeight() / 2;
+		return height / 2;
+	}
+
+	private boolean rootPanelContains(double mouseX, double mouseY) {
+		return mouseX >= rootPanelLeft() && mouseX < rootPanelLeft() + rootPanelWidth()
+			&& mouseY >= rootPanelTop() && mouseY < rootPanelTop() + rootPanelHeight();
+	}
+
+	private int rootListTop() {
+		return rootPanelTop() + ROOT_PANEL_HEADER_HEIGHT;
+	}
+
+	private int rootListBottom() {
+		return rootPanelTop() + rootPanelHeight() - ROOT_PANEL_FOOTER_HEIGHT;
+	}
+
+	private int rootListMaxScroll() {
+		return Math.max(0, ForestManager.size() * ROOT_LIST_ROW_HEIGHT
+			- Math.max(0, rootListBottom() - rootListTop()));
+	}
+
+	private void clampRootListScroll() {
+		rootListScroll = Mth.clamp(rootListScroll, 0, rootListMaxScroll());
 	}
 
 	@Override
@@ -244,7 +324,7 @@ public class ForestScreen extends Screen {
 		lastMouseX = mouseX;
 		lastMouseY = mouseY;
 		float scale = getScale();
-		int scaledWidth = (int) (width / scale);
+		int scaledWidth = (int) (Math.max(1, rootPanelLeft()) / scale);
 		int scaledHeight = (int) (height / scale);
 		// TODO should be the ingredient width if higher
 		int contentWidth = nodeWidth * NODE_WIDTH;
@@ -255,12 +335,15 @@ public class ForestScreen extends Screen {
 		offX = Mth.clamp(offX, -xBound, xBound);
 		offY = Mth.clamp(offY, -bottomBound, -topBound);
 
-		int mx = (int) ((mouseX - width / 2) / scale - offX);
-		int my = (int) ((mouseY - contentCenterY()) / scale - offY);
+		boolean panelHovered = rootPanelContains(mouseX, mouseY);
+		int mx = panelHovered ? Integer.MIN_VALUE
+			: (int) ((mouseX - contentCenterX()) / scale - offX);
+		int my = panelHovered ? Integer.MIN_VALUE
+			: (int) ((mouseY - contentCenterY()) / scale - offY);
 
 		PoseStack view = RenderSystem.getModelViewStack();
 		view.pushPose();
-		view.translate(width / 2, contentCenterY(), 0);
+		view.translate(contentCenterX(), contentCenterY(), 0);
 		view.scale(scale, scale, 1);
 		view.translate(offX, offY, 0);
 		EmiPort.applyModelViewMatrix();
@@ -307,10 +390,6 @@ public class ForestScreen extends Screen {
 		view.popPose();
 		EmiPort.applyModelViewMatrix();
 		renderRootPanel(context, mouseX, mouseY, delta);
-		context.fill(settings.x(), settings.y(), settings.width(), settings.height(),
-			settings.contains(mouseX, mouseY) ? 0xFF8099FF : 0xFF555555);
-		context.fill(settings.x() + 1, settings.y() + 1, settings.width() - 2, settings.height() - 2, 0xFF202020);
-		context.drawTextWithShadow(EmiPort.literal("⚙"), settings.x() + 4, settings.y() + 4, 0xFFFFFFFF);
 
 		if (help.contains(mouseX, mouseY)) {
 			context.setColor(0.5f, 0.6f, 1f, 1f);
@@ -318,30 +397,30 @@ public class ForestScreen extends Screen {
 		context.drawTexture(EmiRenderHelper.WIDGETS, help.x(), help.y(), 0, 200, help.width(), help.height());
 		context.setColor(1f, 1f, 1f, 1f);
 
-		Hover hover = getHoveredStack(mouseX, mouseY);
-		if (settings.contains(mouseX, mouseY)) {
-			EmiRenderHelper.drawTooltip(this, context,
-				EmiTooltip.splitTranslate("tooltip.emi_recipeforest.settings"), mouseX, mouseY);
-		} else if (hover != null) {
+		Hover hover = forest$getHoveredStack(mouseX, mouseY);
+		if (hover != null) {
 			hover.drawTooltip(this, context, mouseX, mouseY);
-		} else if (BoM.tree != null && batches.contains(mx, my)) {
+		} else if (!panelHovered && BoM.tree != null && batches.contains(mx, my)) {
 			List<ClientTooltipComponent> list = Lists.newArrayList();
 			list.addAll(EmiTooltip.splitTranslate("tooltip.emi.bom.batch_size", BoM.tree.batches));
 			list.addAll(EmiTooltip.splitTranslate("tooltip.emi.bom.batch_size.ideal", EmiPort.literal("Left Click")));
 			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
-		} else if (BoM.tree != null && mode.contains(mx, my)) {
+		} else if (!panelHovered && BoM.tree != null && mode.contains(mx, my)) {
 			String key = BoM.craftingMode ? "tooltip.emi.bom.mode.craft" : "tooltip.emi.bom.mode.view";
 			List<ClientTooltipComponent> list = EmiTooltip.splitTranslate(key, BoM.tree.batches);
 			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
 		} else if (help.contains(mouseX, mouseY)) {
 			List<ClientTooltipComponent> list =  EmiTooltip.splitTranslate("tooltip.emi.bom.help");
-			EmiRenderHelper.drawTooltip(this, context, list, width - 18, height - 18, width);
+			EmiRenderHelper.drawTooltip(this, context, list, help.x(), help.y(), width);
 		}
 	}
 
-	public Hover getHoveredStack(int mx, int my) {
+	private Hover forest$getHoveredStack(int mx, int my) {
+		if (rootPanelContains(mx, my)) {
+			return null;
+		}
 		float scale = getScale();
-		mx = (int) ((mx - width / 2) / scale - offX);
+		mx = (int) ((mx - contentCenterX()) / scale - offX);
 		my = (int) ((my - contentCenterY()) / scale - offY);
 		for (Cost cost : costs) {
 			if (mx >= cost.x && mx < cost.x + 16 && my >= cost.y && my < cost.y + 16) {
@@ -358,15 +437,35 @@ public class ForestScreen extends Screen {
 	}
 
 	private void renderRootPanel(EmiDrawContext context, int mouseX, int mouseY, float delta) {
+		int panelLeft = rootPanelLeft();
+		int panelTop = rootPanelTop();
+		context.fill(panelLeft, panelTop, rootPanelWidth(), rootPanelHeight(), 0xB0101010);
+		if (!rootPanelHasContent()) {
+			return;
+		}
+		context.drawTexture(RECIPE_FOREST_ICON, panelLeft + 4, panelTop + 5, 0, 0, 0, 16, 16, 16, 16);
+		boolean toggleHovered = rootLayoutToggle.contains(mouseX, mouseY);
+		context.fill(rootLayoutToggle.x(), rootLayoutToggle.y(), rootLayoutToggle.width(),
+			rootLayoutToggle.height(), toggleHovered ? 0xFF8099FF : 0xFF555555);
+		context.fill(rootLayoutToggle.x() + 1, rootLayoutToggle.y() + 1,
+			rootLayoutToggle.width() - 2, rootLayoutToggle.height() - 2, 0xFF202020);
+		String layoutKey = "screen.emi_recipeforest.settings.root_layout."
+			+ ForestBookmarks.getRootLayout().name().toLowerCase(java.util.Locale.ROOT);
+		context.drawCenteredTextWithShadow(Component.translatable(layoutKey),
+			rootLayoutToggle.x() + rootLayoutToggle.width() / 2, rootLayoutToggle.y() + 5, 0xFFFFFFFF);
+		if (ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST) {
+			renderRootList(context, mouseX, mouseY, delta);
+			return;
+		}
+
 		int columns = rootColumns();
-		int left = (width - columns * ROOT_CELL_SIZE) / 2;
+		int left = panelLeft + (rootPanelWidth() - columns * ROOT_CELL_SIZE) / 2;
 		int start = page * rootsPerPage();
 		int end = Math.min(start + rootsPerPage(), ForestManager.size());
-		context.fill(left - 3, 3, columns * ROOT_CELL_SIZE + 6, rootPanelHeight(), 0xB0101010);
 		for (int index = start; index < end; index++) {
 			int local = index - start;
 			int x = left + local % columns * ROOT_CELL_SIZE;
-			int y = 6 + local / columns * ROOT_CELL_SIZE;
+			int y = panelTop + ROOT_PANEL_HEADER_HEIGHT + local / columns * ROOT_CELL_SIZE;
 			boolean selected = index == ForestManager.getSelectedIndex();
 			boolean hovered = mouseX >= x && mouseX < x + 18 && mouseY >= y && mouseY < y + 18;
 			int border = selected ? 0xFF8099FF : hovered ? 0xFFFFFFFF : 0xFF555555;
@@ -376,6 +475,7 @@ public class ForestScreen extends Screen {
 			if (tree != null && tree.goal != null) {
 				tree.goal.ingredient.render(context.raw(), x + 1, y + 1, delta,
 					~(EmiIngredient.RENDER_AMOUNT | EmiIngredient.RENDER_REMAINDER));
+				EmiRenderHelper.renderAmount(context, x, y, EmiPort.literal("×" + tree.batches));
 			}
 			context.fill(x + 12, y, 6, 6, 0xFF8C2020);
 			context.drawTextWithShadow(EmiPort.literal("×"), x + 12, y - 2, 0xFFFFFFFF);
@@ -388,6 +488,72 @@ public class ForestScreen extends Screen {
 			context.drawTextWithShadow(EmiPort.literal("›"), nextPage.x() + 4, nextPage.y() + 3,
 				nextPage.contains(mouseX, mouseY) ? 0xFF8099FF : 0xFFFFFFFF);
 		}
+	}
+
+	private void renderRootList(EmiDrawContext context, int mouseX, int mouseY, float delta) {
+		clampRootListScroll();
+		int left = rootPanelLeft() + 4;
+		int right = rootPanelLeft() + rootPanelWidth() - 4;
+		int top = rootListTop();
+		int bottom = rootListBottom();
+		context.raw().enableScissor(left, top, right, bottom);
+		for (int index = 0; index < ForestManager.size(); index++) {
+			int y = top + index * ROOT_LIST_ROW_HEIGHT - rootListScroll;
+			if (y + ROOT_LIST_ROW_HEIGHT <= top || y >= bottom) {
+				continue;
+			}
+			boolean selected = index == ForestManager.getSelectedIndex();
+			boolean hovered = mouseX >= left && mouseX < right && mouseY >= y
+				&& mouseY < y + ROOT_LIST_ROW_HEIGHT;
+			int border = selected ? 0xFF8099FF : hovered ? 0xFFFFFFFF : 0xFF555555;
+			context.fill(left, y + 1, right - left, ROOT_LIST_ROW_HEIGHT - 2, border);
+			context.fill(left + 1, y + 2, right - left - 2, ROOT_LIST_ROW_HEIGHT - 4, 0xFF202020);
+
+			MaterialTree tree = ForestManager.getTrees().get(index);
+			if (tree != null && tree.goal != null) {
+				tree.goal.ingredient.render(context.raw(), left + 3, y + 4, delta,
+					~(EmiIngredient.RENDER_AMOUNT | EmiIngredient.RENDER_REMAINDER));
+				int controlsLeft = rootListControlsLeft();
+				int textWidth = Math.max(0, controlsLeft - (left + 22));
+				String batchesText = "×" + tree.batches;
+				String clipped = font.plainSubstrByWidth(batchesText, textWidth);
+				context.drawTextWithShadow(EmiPort.literal(clipped), left + 22, y + 8, 0xFFFFFFFF);
+			}
+
+			renderRootListControl(context, rootListControlBounds(y, 0), "−", canDecrementRootListBatch(tree),
+				mouseX, mouseY);
+			renderRootListControl(context, rootListControlBounds(y, 1), "+", true, mouseX, mouseY);
+			renderRootListControl(context, rootListControlBounds(y, 2), "↑", index > 0, mouseX, mouseY);
+			renderRootListControl(context, rootListControlBounds(y, 3), "↓", index + 1 < ForestManager.size(),
+				mouseX, mouseY);
+			renderRootListControl(context, rootListControlBounds(y, 4), "×", true, mouseX, mouseY);
+		}
+		context.raw().disableScissor();
+	}
+
+	private int rootListControlsLeft() {
+		return rootPanelLeft() + rootPanelWidth() - 4 - ROOT_LIST_CONTROL_WIDTH * ROOT_LIST_CONTROL_COUNT;
+	}
+
+	private Bounds rootListControlBounds(int rowY, int slot) {
+		return new Bounds(rootListControlsLeft() + slot * ROOT_LIST_CONTROL_WIDTH, rowY + 5,
+			ROOT_LIST_CONTROL_WIDTH, 14);
+	}
+
+	private boolean canDecrementRootListBatch(MaterialTree tree) {
+		if (EmiInput.isAltDown()) {
+			return ForestManager.getTrees().stream().anyMatch(root -> root.batches > 1);
+		}
+		return tree != null && tree.batches > 1;
+	}
+
+	private void renderRootListControl(EmiDrawContext context, Bounds bounds, String label, boolean enabled,
+			int mouseX, int mouseY) {
+		boolean hovered = enabled && bounds.contains(mouseX, mouseY);
+		context.fill(bounds.x(), bounds.y(), bounds.width(), bounds.height(), enabled
+			? hovered ? 0xFF8099FF : 0xFF555555 : 0xFF333333);
+		context.drawCenteredTextWithShadow(EmiPort.literal(label), bounds.x() + bounds.width() / 2,
+			bounds.y() + 3, enabled ? 0xFFFFFFFF : 0xFF777777);
 	}
 
 	public int getNodeHeight(MaterialNode node) {
@@ -404,7 +570,7 @@ public class ForestScreen extends Screen {
 		return 1;
 	}
 
-	public TreeVolume addNewNodes(MaterialNode node, long multiplier, long divisor, int depth, ChanceState chance) {
+	private TreeVolume forest$addNewNodes(MaterialNode node, long multiplier, long divisor, int depth, ChanceState chance) {
 		if (EmiCompatibility.isCatalyst(node)) {
 			multiplier = node.amount;
 		} else {
@@ -413,14 +579,14 @@ public class ForestScreen extends Screen {
 		if (node.recipe != null && node.children.size() > 0 && node.state == FoldState.EXPANDED) {
 			ChanceState produced = chance.produce(node.produceChance);
 			if (node.recipe instanceof EmiResolutionRecipe) {
-				TreeVolume volume = addNewNodes(node.children.get(0), multiplier, node.divisor, depth, produced);
+				TreeVolume volume = forest$addNewNodes(node.children.get(0), multiplier, node.divisor, depth, produced);
 				volume.nodes.get(0).resolution = node;
 				return volume;
 			}
 			TreeVolume left = null;
 			for (int i = 0; i < node.children.size(); i++) {
 				ChanceState consumed = produced.consume(node.children.get(i).consumeChance);
-				TreeVolume volume = addNewNodes(node.children.get(i), multiplier, node.divisor, depth + 1, consumed);
+				TreeVolume volume = forest$addNewNodes(node.children.get(i), multiplier, node.divisor, depth + 1, consumed);
 				if (left == null) {
 					left = volume;
 				} else {
@@ -470,7 +636,7 @@ public class ForestScreen extends Screen {
 			EmiHistory.pop();
 			return true;
 		}
-		Hover hover = getHoveredStack(lastMouseX, lastMouseY);
+		Hover hover = forest$getHoveredStack(lastMouseX, lastMouseY);
 		if (hover != null && hover.stack != null && !hover.stack.isEmpty()) {
 			if (function.apply(EmiConfig.favorite)) {
 				EmiFavorites.addFavorite(hover.stack, hover.node == null ? null : hover.node.recipe);
@@ -496,7 +662,7 @@ public class ForestScreen extends Screen {
 			ForestManager.clear();
 			init();
 		}
-		return super.keyPressed(keyCode, scanCode, modifiers);
+		return false;
 	}
 
 	private boolean getAutoResolutions(Hover hover, BiConsumer<EmiIngredient, EmiRecipe> consumer) {
@@ -520,7 +686,7 @@ public class ForestScreen extends Screen {
 				}
 				consumer.accept(hover.stack, new EmiResolutionRecipe(hover.stack, stacks.get(0)));
 				return true;
-			} else {
+			} else if (EmiApi.getHandledScreen() != null) {
 				EmiRecipe recipe = EmiUtil.getRecipeResolution(hover.stack, inv);
 				if (recipe != null) {
 					consumer.accept(hover.stack, recipe);
@@ -533,17 +699,25 @@ public class ForestScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
+		if (button == 0 || button == 2) {
+			rootPanelDrag = rootPanelContains(mouseX, mouseY);
+		}
 		if (handleRootPanelClick(mouseX, mouseY, button)) {
 			return true;
 		}
-		Hover hover = getHoveredStack((int) mouseX, (int) mouseY);
+		if (rootPanelContains(mouseX, mouseY)) {
+			return true;
+		}
+		Hover hover = forest$getHoveredStack((int) mouseX, (int) mouseY);
 		float scale = getScale();
-		int mx = (int) ((mouseX - width / 2) / scale - offX);
+		int mx = (int) ((mouseX - contentCenterX()) / scale - offX);
 		int my = (int) ((mouseY - contentCenterY()) / scale - offY);
 		if (hover != null) {
 			if (button == 1 && hover.node != null && hover.node.recipe != null) {
 				if (EmiInput.isShiftDown()) {
-					ForestManager.addResolution(hover.node.ingredient, null);
+					ForestManager.cancelPendingResolution();
+					ForestManager.addResolution(hover.node.ingredient, null,
+						ForestBookmarks.getResolutionScope());
 				} else if (!(hover.node.recipe instanceof EmiResolutionRecipe)) {
 					if (hover.node.state == FoldState.EXPANDED) {
 						hover.node.state = FoldState.COLLAPSED;
@@ -556,24 +730,32 @@ public class ForestScreen extends Screen {
 			}
 			if (hover.stack != null) {
 				if (EmiInput.isShiftDown() && button == 0) {
-					boolean allTrees = hover.node == null;
+					ForestManager.cancelPendingResolution();
 					if (getAutoResolutions(hover,
-						(ingredient, recipe) -> ForestManager.addResolution(ingredient, recipe, allTrees))) {
+						(ingredient, recipe) -> ForestManager.addResolution(ingredient, recipe,
+							ForestBookmarks.getResolutionScope()))) {
 						recalculateTree();
 					}
 					return true;
 				} else {
 					if (button == 0) {
+						ForestManager.cancelPendingResolution();
 						EmiApi.displayRecipes(hover.stack);
-						RecipeScreen.resolve = hover.stack;
 						Minecraft client = Minecraft.getInstance();
+						if (!(client.screen instanceof RecipeScreen recipeScreen)) {
+							return true;
+						}
+						RecipeScreen.resolve = hover.stack;
 						// The first init doesn't realize a resolution exists so we do it again. What
 						// could go wrong.
-						client.screen.init(client, client.screen.width, client.screen.height);
+						recipeScreen.init(client, recipeScreen.width, recipeScreen.height);
 						if (hover.node != null) {
 							if (hover.node.recipe != null) {
 								EmiApi.focusRecipe(hover.node.recipe);
 							}
+						} else {
+							ForestManager.beginPendingResolution(hover.stack,
+								ForestBookmarks.getResolutionScope());
 						}
 						return true;
 					}
@@ -602,13 +784,53 @@ public class ForestScreen extends Screen {
 			EmiHistory.pop();
 			return true;
 		}
-		return super.mouseClicked(mouseX, mouseY, button);
+		return false;
 	}
 
 	private boolean handleRootPanelClick(double mouseX, double mouseY, int button) {
-		if (button == 0 && settings.contains((int) mouseX, (int) mouseY)) {
-			Minecraft.getInstance().setScreen(new ForestSettingsScreen(this));
+		if (!rootPanelContains(mouseX, mouseY)) {
+			return false;
+		}
+		if (!rootPanelHasContent()) {
 			return true;
+		}
+		if (button == 0 && rootLayoutToggle.contains((int) mouseX, (int) mouseY)) {
+			ForestBookmarks.setRootLayout(ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST
+				? ForestBookmarks.RootLayout.GRID : ForestBookmarks.RootLayout.LIST);
+			page = 0;
+			recalculateTree();
+			return true;
+		}
+		if (ForestBookmarks.getRootLayout() != ForestBookmarks.RootLayout.GRID) {
+			if (!rootPanelContains(mouseX, mouseY)) {
+				return false;
+			}
+			if (button == 0 && mouseY >= rootListTop() && mouseY < rootListBottom()) {
+				int index = ((int) mouseY - rootListTop() + rootListScroll) / ROOT_LIST_ROW_HEIGHT;
+				if (index >= 0 && index < ForestManager.size()) {
+					int rowY = rootListTop() + index * ROOT_LIST_ROW_HEIGHT - rootListScroll;
+					if (rootListControlBounds(rowY, 0).contains((int) mouseX, (int) mouseY)) {
+						adjustRootListBatch(index, -1);
+					} else if (rootListControlBounds(rowY, 1).contains((int) mouseX, (int) mouseY)) {
+						adjustRootListBatch(index, 1);
+					} else if (rootListControlBounds(rowY, 2).contains((int) mouseX, (int) mouseY)) {
+						if (index > 0) {
+							ForestManager.move(index, index - 1);
+						}
+					} else if (rootListControlBounds(rowY, 3).contains((int) mouseX, (int) mouseY)) {
+						if (index + 1 < ForestManager.size()) {
+							ForestManager.move(index, index + 1);
+						}
+					} else if (rootListControlBounds(rowY, 4).contains((int) mouseX, (int) mouseY)) {
+						ForestManager.remove(index);
+					} else {
+						ForestManager.select(index);
+					}
+					clampRootListScroll();
+					recalculateTree();
+				}
+			}
+			return rootPanelContains(mouseX, mouseY);
 		}
 		if (button == 0 && page > 0 && previousPage.contains((int) mouseX, (int) mouseY)) {
 			page--;
@@ -621,18 +843,18 @@ public class ForestScreen extends Screen {
 		}
 		int columns = rootColumns();
 		int rows = rootRows();
-		int left = (width - columns * ROOT_CELL_SIZE) / 2;
+		int left = rootPanelLeft() + (rootPanelWidth() - columns * ROOT_CELL_SIZE) / 2;
 		int localX = (int) mouseX - left;
-		int localY = (int) mouseY - 6;
+		int localY = (int) mouseY - rootPanelTop() - ROOT_PANEL_HEADER_HEIGHT;
 		if (localX < 0 || localY < 0 || localX >= columns * ROOT_CELL_SIZE
 				|| localY >= rows * ROOT_CELL_SIZE) {
-			return false;
+			return rootPanelContains(mouseX, mouseY);
 		}
 		int column = localX / ROOT_CELL_SIZE;
 		int row = localY / ROOT_CELL_SIZE;
 		int index = page * rootsPerPage() + row * columns + column;
 		if (index >= ForestManager.size()) {
-			return false;
+			return true;
 		}
 		int withinX = localX % ROOT_CELL_SIZE;
 		int withinY = localY % ROOT_CELL_SIZE;
@@ -647,6 +869,17 @@ public class ForestScreen extends Screen {
 		return true;
 	}
 
+	private void adjustRootListBatch(int index, long amount) {
+		if (index < 0 || index >= ForestManager.size()) {
+			return;
+		}
+		List<MaterialTree> targets = EmiInput.isAltDown()
+			? ForestManager.getTrees() : List.of(ForestManager.getTrees().get(index));
+		for (MaterialTree tree : targets) {
+			adjustBatch(tree, amount);
+		}
+	}
+
 	private List<MaterialTree> batchTargets() {
 		return EmiInput.isAltDown() ? ForestManager.getTrees()
 			: BoM.tree == null ? List.of() : List.of(BoM.tree);
@@ -654,11 +887,19 @@ public class ForestScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+		if (rootPanelContains(mouseX, mouseY)) {
+			if (ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST
+					&& mouseY >= rootListTop() && mouseY < rootListBottom()) {
+				rootListScroll -= (int) Math.round(amount * ROOT_LIST_ROW_HEIGHT);
+				clampRootListScroll();
+			}
+			return true;
+		}
 		scrollAcc += amount;
 		amount = (int) scrollAcc;
 		scrollAcc %= 1;
 		float scale = getScale();
-		int mx = (int) ((mouseX - width / 2) / scale - offX);
+		int mx = (int) ((mouseX - contentCenterX()) / scale - offX);
 		int my = (int) ((mouseY - contentCenterY()) / scale - offY);
 		if (BoM.tree != null && batches.contains(mx, my)) {
 			for (MaterialTree tree : batchTargets()) {
@@ -688,13 +929,25 @@ public class ForestScreen extends Screen {
 
 	@Override
 	public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+		if (rootPanelDrag && (button == 0 || button == 2)) {
+			return true;
+		}
 		if (button == 0 || button == 2) {
 			float scale = getScale();
 			offX += deltaX / scale;
 			offY += deltaY / scale;
 			return true;
 		}
-		return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+		return false;
+	}
+
+	@Override
+	public boolean mouseReleased(double mouseX, double mouseY, int button) {
+		boolean consumed = rootPanelDrag && (button == 0 || button == 2);
+		if (button == 0 || button == 2) {
+			rootPanelDrag = false;
+		}
+		return consumed || super.mouseReleased(mouseX, mouseY, button);
 	}
 
 	@Override
@@ -704,6 +957,7 @@ public class ForestScreen extends Screen {
 
 	@Override
 	public void onClose() {
+		ForestManager.cancelPendingResolution();
 		Minecraft.getInstance().setScreen(old);
 	}
 
@@ -725,22 +979,37 @@ public class ForestScreen extends Screen {
 		}
 
 		public void renderAmount(EmiDrawContext context) {
+			if (EmiInput.isAltDown() && ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
+					&& renderCostQuantityIcons(context, this)) {
+				return;
+			}
 			EmiRenderHelper.renderAmount(context, x, y, getAmountText());
 		}
 
 		public Component getAmountText() {
+			return getAmountText(EmiInput.isAltDown());
+		}
+
+		public int getReservedAmountOverflow() {
+			int altOverflow = ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
+				? getCostQuantityIconWidth(this) : EmiRenderHelper.getAmountOverflow(getAmountText(true));
+			return Math.max(EmiRenderHelper.getAmountOverflow(getAmountText(false)), altOverflow);
+		}
+
+		private Component getAmountText(boolean decomposed) {
 			long adjusted = cost.getEffectiveAmount();
 			Component totalText;
 			if (cost instanceof ChanceMaterialCost cmc) {
-				totalText = EmiPort.append(EmiPort.literal("≈"), amountText(cost.ingredient, adjusted))
+				totalText = EmiPort.append(EmiPort.literal("≈"), amountText(cost.ingredient, adjusted, decomposed))
 					.withStyle(ChatFormatting.GOLD);
 			} else {
-				totalText = amountText(cost.ingredient, adjusted);
+				totalText = amountText(cost.ingredient, adjusted, decomposed);
 			}
 			if (!remainder && BoM.craftingMode) {
 				long amount = alreadyDone;
 				if (amount < adjusted) {
-					Component doneText = amount == 0 ? EmiPort.literal("0") : amountText(cost.ingredient, amount);
+					Component doneText = amount == 0 ? EmiPort.literal("0")
+						: amountText(cost.ingredient, amount, decomposed);
 					MutableComponent text = EmiPort.append(EmiPort.literal("", ChatFormatting.RED), doneText);
 					text = EmiPort.append(text, EmiPort.literal("/"));
 					text = EmiPort.append(text, totalText);
@@ -751,17 +1020,145 @@ public class ForestScreen extends Screen {
 		}
 	}
 
-	private Component amountText(EmiIngredient ingredient, long amount) {
-		if (EmiInput.isAltDown() && !ingredient.getEmiStacks().isEmpty()) {
+	private Component amountText(EmiIngredient ingredient, long amount, boolean decomposed) {
+		if (decomposed && !ingredient.getEmiStacks().isEmpty()) {
 			var itemStack = ingredient.getEmiStacks().get(0).getItemStack();
-			if (!itemStack.isEmpty() && itemStack.getMaxStackSize() > 1 && amount >= itemStack.getMaxStackSize()) {
-				long stacks = amount / itemStack.getMaxStackSize();
-				long remainder = amount % itemStack.getMaxStackSize();
-				return EmiPort.literal(stacks + "×" + itemStack.getMaxStackSize()
-					+ (remainder == 0 ? "" : " + " + remainder));
+			if (!itemStack.isEmpty() && itemStack.getMaxStackSize() > 1) {
+				DisplayMode mode = ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
+					? DisplayMode.ICON : DisplayMode.TEXT;
+				QuantityDisplay display = QuantityDisplay.decompose(Math.max(0, amount),
+					itemStack.getMaxStackSize(), ForestBookmarks.isBoxEnabled(),
+					ForestBookmarks.getStacksPerBox(), mode);
+				List<Component> units = Lists.newArrayList();
+				if (display.hasBoxes()) {
+					units.add(Component.translatable("screen.emi_recipeforest.quantity.text.box",
+						display.boxes(), ForestBookmarks.getStacksPerBox(), display.stackUnitCapacity()));
+				}
+				if (display.hasFullStacks()) {
+					units.add(Component.translatable("screen.emi_recipeforest.quantity.text.stack",
+						display.fullStacks(), display.stackUnitCapacity()));
+				}
+				if (display.hasItems()) {
+					units.add(Component.translatable("screen.emi_recipeforest.quantity.text.item", display.items()));
+				}
+				if (units.isEmpty()) {
+					return Component.translatable("screen.emi_recipeforest.quantity.text.zero");
+				}
+				MutableComponent result = EmiPort.append(EmiPort.literal(""), units.get(0));
+				for (int i = 1; i < units.size(); i++) {
+					result = EmiPort.append(result, EmiPort.literal(" + "));
+					result = EmiPort.append(result, units.get(i));
+				}
+				return result;
 			}
 		}
 		return EmiRenderHelper.getAmountText(ingredient, amount);
+	}
+
+	private QuantityDisplay quantityDisplay(EmiIngredient ingredient, long amount) {
+		if (ingredient.getEmiStacks().isEmpty()) {
+			return null;
+		}
+		var itemStack = ingredient.getEmiStacks().get(0).getItemStack();
+		if (itemStack.isEmpty() || itemStack.getMaxStackSize() <= 1) {
+			return null;
+		}
+		return QuantityDisplay.decompose(Math.max(0, amount), itemStack.getMaxStackSize(),
+			ForestBookmarks.isBoxEnabled(), ForestBookmarks.getStacksPerBox(), DisplayMode.ICON);
+	}
+
+	private int quantityIconWidth(QuantityDisplay display) {
+		if (display == null) {
+			return 0;
+		}
+		int width = 0;
+		if (display.hasBoxes()) {
+			width += quantityUnitWidth(display.boxes(), 0);
+		}
+		if (display.hasFullStacks()) {
+			width += quantityUnitWidth(display.fullStacks(), display.stackUnitCapacity());
+		}
+		if (display.hasItems()) {
+			width += quantityUnitWidth(display.items(), 0);
+		}
+		return Math.max(0, width - 2);
+	}
+
+	private int quantityUnitWidth(long count, long capacity) {
+		String badge = capacity != 0 && capacity != 16 && capacity != 64 ? "/" + capacity : "";
+		return 18 + font.width(Long.toString(count)) + font.width(badge);
+	}
+
+	private int renderQuantityIcons(EmiDrawContext context, int x, int y, QuantityDisplay display) {
+		int cursor = x;
+		if (display.hasBoxes()) {
+			cursor = renderQuantityUnit(context, cursor, y, 0, display.boxes(), 0);
+		}
+		if (display.hasFullStacks()) {
+			int u = display.stackUnitCapacity() == 16 ? 16 : 32;
+			cursor = renderQuantityUnit(context, cursor, y, u, display.fullStacks(),
+				display.stackUnitCapacity());
+		}
+		if (display.hasItems()) {
+			cursor = renderQuantityUnit(context, cursor, y, 48, display.items(), 0);
+		}
+		return cursor;
+	}
+
+	private int renderQuantityUnit(EmiDrawContext context, int x, int y, int u, long count, long capacity) {
+		context.drawTexture(QUANTITY_UNITS, x, y, 0, u, 0, 16, 16, 64, 16);
+		String countText = Long.toString(count);
+		context.drawTextWithShadow(EmiPort.literal(countText), x + 16, y + 7, 0xFFFFFFFF);
+		int cursor = x + 16 + font.width(countText);
+		if (capacity != 0 && capacity != 16 && capacity != 64) {
+			String badge = "/" + capacity;
+			context.drawTextWithShadow(EmiPort.literal(badge), cursor, y + 7, 0xFFFFAA00);
+			cursor += font.width(badge);
+		}
+		return cursor + 2;
+	}
+
+	private int getCostQuantityIconWidth(Cost cost) {
+		long adjusted = cost.cost.getEffectiveAmount();
+		int total = quantityIconWidth(quantityDisplay(cost.cost.ingredient, adjusted));
+		if (total == 0) {
+			return EmiRenderHelper.getAmountOverflow(cost.getAmountText(true));
+		}
+		if (cost.cost instanceof ChanceMaterialCost) {
+			total += font.width("≈");
+		}
+		if (!cost.remainder && BoM.craftingMode && cost.alreadyDone < adjusted) {
+			int done = cost.alreadyDone == 0 ? font.width("0")
+				: quantityIconWidth(quantityDisplay(cost.cost.ingredient, cost.alreadyDone));
+			total += done + font.width("/");
+		}
+		return total;
+	}
+
+	private boolean renderCostQuantityIcons(EmiDrawContext context, Cost cost) {
+		long adjusted = cost.cost.getEffectiveAmount();
+		QuantityDisplay total = quantityDisplay(cost.cost.ingredient, adjusted);
+		if (total == null) {
+			return false;
+		}
+		int cursor = cost.x + 16;
+		if (!cost.remainder && BoM.craftingMode && cost.alreadyDone < adjusted) {
+			QuantityDisplay done = quantityDisplay(cost.cost.ingredient, cost.alreadyDone);
+			if (done == null || quantityIconWidth(done) == 0) {
+				context.drawTextWithShadow(EmiPort.literal("0"), cursor, cost.y + 7, 0xFFFF5555);
+				cursor += font.width("0");
+			} else {
+				cursor = renderQuantityIcons(context, cursor, cost.y, done);
+			}
+			context.drawTextWithShadow(EmiPort.literal("/"), cursor, cost.y + 7, 0xFFFFFFFF);
+			cursor += font.width("/");
+		}
+		if (cost.cost instanceof ChanceMaterialCost) {
+			context.drawTextWithShadow(EmiPort.literal("≈"), cursor, cost.y + 7, 0xFFFFAA00);
+			cursor += font.width("≈");
+		}
+		renderQuantityIcons(context, cursor, cost.y, total);
+		return true;
 	}
 
 	private class Hover {
@@ -842,7 +1239,9 @@ public class ForestScreen extends Screen {
 			this.x = x;
 			this.y = y;
 			this.chance = chance;
-			int tw = EmiRenderHelper.getAmountOverflow(getAmountText());
+			int altOverflow = ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
+				? getQuantityIconWidth() : EmiRenderHelper.getAmountOverflow(getAmountText(true));
+			int tw = Math.max(EmiRenderHelper.getAmountOverflow(getAmountText(false)), altOverflow);
 			width += tw;
 			midOffset = tw / -2;
 		}
@@ -906,7 +1305,35 @@ public class ForestScreen extends Screen {
 
 		public void renderAmount(EmiDrawContext context) {
 			int xo = node.recipe == null ? 0 : 11;
+			if (EmiInput.isAltDown() && ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON) {
+				long displayAmount = getDisplayAmount();
+				QuantityDisplay display = quantityDisplay(node.ingredient, displayAmount);
+				if (display != null) {
+					int cursor = x + xo + 8 + midOffset;
+					if (chance.chanced()) {
+						context.drawTextWithShadow(EmiPort.literal("≈"), cursor, y - 1, 0xFFFFAA00);
+						cursor += font.width("≈");
+					}
+					renderQuantityIcons(context, cursor, y - 8, display);
+					return;
+				}
+			}
 			EmiRenderHelper.renderAmount(context, x + xo - 8 + midOffset, y - 8, getAmountText());
+		}
+
+		private long getDisplayAmount() {
+			if (chance.chanced()) {
+				return Math.max(Math.round(amount * chance.chance()), node.amount);
+			}
+			return amount;
+		}
+
+		private int getQuantityIconWidth() {
+			QuantityDisplay display = quantityDisplay(node.ingredient, getDisplayAmount());
+			if (display == null) {
+				return EmiRenderHelper.getAmountOverflow(getAmountText(true));
+			}
+			return quantityIconWidth(display) + (chance.chanced() ? font.width("≈") : 0);
 		}
 
 		public void setColor(EmiDrawContext context, MaterialNode node, boolean chanced, boolean hovered) {
@@ -927,14 +1354,18 @@ public class ForestScreen extends Screen {
 		}
 
 		public Component getAmountText() {
+			return getAmountText(EmiInput.isAltDown());
+		}
+
+		private Component getAmountText(boolean decomposed) {
 			if (chance.chanced()) {
 				long a = Math.round(amount * chance.chance());
 				a = Math.max(a, node.amount);
 				return EmiPort.append(EmiPort.literal("≈"),
-						amountText(node.ingredient, a))
+						amountText(node.ingredient, a, decomposed))
 					.withStyle(ChatFormatting.GOLD);
 			} else {
-				return amountText(node.ingredient, amount);
+				return amountText(node.ingredient, amount, decomposed);
 			}
 		}
 
