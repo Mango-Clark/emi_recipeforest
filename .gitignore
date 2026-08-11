@@ -16,3 +16,10 @@ hs_err_pid*
 
 # Common working directory
 run
+runs
+
+# logs
+*.log
+
+# vscode
+.vscode
