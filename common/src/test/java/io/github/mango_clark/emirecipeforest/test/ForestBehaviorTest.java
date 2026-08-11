@@ -270,6 +270,85 @@ class ForestBehaviorTest {
     }
 
     @Test
+    void reloadSnapshotRestoresRecoverableDuplicateStateAndSkipsMissingRoots() throws Exception {
+        Object oldDuplicate = runtime.recipe("reload:duplicate", runtime.stack("duplicate-old", 1),
+                List.of(runtime.stack("ingredient", 1)));
+        Object missing = runtime.recipe("reload:missing", runtime.stack("missing", 1), List.of());
+        Object oldLast = runtime.recipe("reload:last", runtime.stack("last-old", 1), List.of());
+        Object first = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), oldDuplicate);
+        Object skipped = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), missing);
+        Object selected = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), oldDuplicate);
+        Object last = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), oldLast);
+        field(first, "batches", 2L);
+        field(skipped, "batches", 3L);
+        field(selected, "batches", 4L);
+        field(last, "batches", 5L);
+        call(manager, "select", types(int.class), 2);
+        call(manager, "setCraftingMode", types(boolean.class), true);
+
+        Object ingredient = runtime.stack("ingredient", 1);
+        Object oldResolution = runtime.recipe("reload:resolution", runtime.stack("resolved-old", 1), List.of());
+        call(manager, "addResolution", types("dev.emi.emi.api.stack.EmiIngredient",
+                "dev.emi.emi.api.recipe.EmiRecipe", boolean.class), ingredient, oldResolution, false);
+        Object selectedGoal = field(selected, "goal");
+        Object selectedChild = ((List<?>) field(selectedGoal, "children")).get(0);
+        field(selectedChild, "state", enumConstant(runtime.type("dev.emi.emi.bom.FoldState"), "COLLAPSED"));
+
+        call(manager, "beginRecipeReload", types());
+        assertTrue((boolean) call(manager, "isEmpty", types()));
+
+        Object newDuplicate = runtime.recipe("reload:duplicate", runtime.stack("duplicate-new", 1),
+                List.of(runtime.stack("ingredient", 1)));
+        Object newLast = runtime.recipe("reload:last", runtime.stack("last-new", 1), List.of());
+        Object newResolution = runtime.recipe("reload:resolution", runtime.stack("resolved-new", 1), List.of());
+        registerRecipe(newDuplicate);
+        registerRecipe(newLast);
+        registerRecipe(newResolution);
+        call(manager, "finishRecipeReload", types());
+
+        List<?> restored = (List<?>) call(manager, "getTrees", types());
+        assertEquals(3, restored.size());
+        assertSame(newDuplicate, field(field(restored.get(0), "goal"), "recipe"));
+        assertSame(newDuplicate, field(field(restored.get(1), "goal"), "recipe"));
+        assertSame(newLast, field(field(restored.get(2), "goal"), "recipe"));
+        assertEquals(2L, field(restored.get(0), "batches"));
+        assertEquals(4L, field(restored.get(1), "batches"));
+        assertEquals(5L, field(restored.get(2), "batches"));
+        assertEquals(1, call(manager, "getSelectedIndex", types()));
+        assertTrue((boolean) call(manager, "isCraftingMode", types()));
+        Object restoredChild = ((List<?>) field(field(restored.get(1), "goal"), "children")).get(0);
+        assertEquals("COLLAPSED", field(restoredChild, "state").toString());
+        assertSame(newResolution, castMap(field(restored.get(1), "resolutions")).get(ingredient));
+    }
+
+    @Test
+    void reloadSnapshotSurvivesRetryUntilSuccess() throws Exception {
+        Object oldRecipe = runtime.recipe("reload:retry", runtime.stack("retry-old", 1), List.of());
+        call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), oldRecipe);
+        call(manager, "beginRecipeReload", types());
+        call(manager, "beginRecipeReload", types());
+        assertTrue((boolean) call(manager, "isEmpty", types()));
+
+        Object currentRecipe = runtime.recipe("reload:retry", runtime.stack("retry-new", 1), List.of());
+        registerRecipe(currentRecipe);
+        call(manager, "finishRecipeReload", types());
+        assertEquals(1, call(manager, "size", types()));
+        assertSame(currentRecipe, field(field(call(manager, "getSelectedTree", types()), "goal"), "recipe"));
+    }
+
+    @Test
+    void sessionClearDropsPendingReloadSnapshot() throws Exception {
+        Object oldRecipe = runtime.recipe("reload:session-clear", runtime.stack("session-old", 1), List.of());
+        call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), oldRecipe);
+        call(manager, "beginRecipeReload", types());
+        call(manager, "clear", types());
+
+        registerRecipe(runtime.recipe("reload:session-clear", runtime.stack("session-new", 1), List.of()));
+        call(manager, "finishRecipeReload", types());
+        assertTrue((boolean) call(manager, "isEmpty", types()));
+    }
+
+    @Test
     void costsShareRemaindersAndTrackChanceAndCraftingProgress() throws Exception {
         Object material = runtime.stack("material", 1);
         Object product = runtime.stack("product", 2);
@@ -481,6 +560,11 @@ class ForestBehaviorTest {
     private static Object newTree(Object recipe) throws Exception {
         return runtime.type("dev.emi.emi.bom.MaterialTree")
                 .getConstructor(runtime.type("dev.emi.emi.api.recipe.EmiRecipe")).newInstance(recipe);
+    }
+
+    private static void registerRecipe(Object recipe) throws Exception {
+        Object recipeManager = call(runtime.type("dev.emi.emi.api.EmiApi"), "getRecipeManager", types());
+        call(recipeManager.getClass(), recipeManager, "put", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe);
     }
 
     private static void clearResolutions(Object... trees) throws Exception {

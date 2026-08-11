@@ -59,6 +59,7 @@ import dev.emi.emi.screen.RecipeScreen;
 import dev.emi.emi.screen.tooltip.EmiTooltip;
 import dev.emi.emi.screen.tooltip.RecipeTooltipComponent;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
+import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.compat.EmiCompatibility;
 import io.github.mango_clark.emirecipeforest.forest.ForestCosts;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
@@ -77,10 +78,11 @@ public class ForestScreen extends BoMScreen {
 	private static final int ROOT_LIST_ROW_HEIGHT = 24;
 	private static final int ROOT_LIST_CONTROL_WIDTH = 12;
 	private static final int ROOT_LIST_CONTROL_COUNT = 5;
-	private static final ResourceLocation QUANTITY_UNITS = EmiPort.id("emi_recipeforest",
-		"textures/gui/quantity_units.png");
-	private static final ResourceLocation RECIPE_FOREST_ICON = EmiPort.id("emi_recipeforest",
-		"textures/gui/recipe_forest_icon.png");
+	private static final int ROOT_LIST_STACKED_CONTROL_HEIGHT = 9;
+	private static final int ROOT_LIST_CONTROL_GAP = 2;
+	private static final int ROOT_LIST_RIGHT_MARGIN = 3;
+	private static final ResourceLocation RECIPE_FOREST_WIDGETS = EmiPort.id("emi_recipeforest",
+		"textures/gui/widgets.png");
 	private static final ThreadLocal<Boolean> OPENING_FOREST = ThreadLocal.withInitial(() -> false);
 	private static StackBatcher batcher = new StackBatcher();
 	private static int zoom = 0;
@@ -101,7 +103,12 @@ public class ForestScreen extends BoMScreen {
 	private int nodeHeight = 0;
 	private int lastMouseX, lastMouseY;
 	private double scrollAcc = 0;
+	private double rootBatchScrollAcc = 0;
+	private int rootBatchScrollIndex = -1;
 	private boolean rootPanelDrag;
+	private boolean altLayout;
+	private MaterialTree lastCalculatedTree;
+	private boolean lastCalculatedForestEmpty;
 
 	public ForestScreen(AbstractContainerScreen<?> old) {
 		super(old);
@@ -124,7 +131,8 @@ public class ForestScreen extends BoMScreen {
 
 	public void init() {
 		ForestManager.cancelPendingResolution();
-		if (BoM.tree != null) {
+		altLayout = EmiInput.isAltDown();
+		if (ForestManager.getSelectedTree() != null) {
 			offY = height / -3;
 		} else {
 			offY = 0;
@@ -133,6 +141,8 @@ public class ForestScreen extends BoMScreen {
 	}
 
 	public void recalculateTree() {
+		MaterialTree selectedTree = ForestManager.getSelectedTree();
+		boolean forestEmpty = ForestManager.isEmpty();
 		help = new Bounds(Math.max(2, rootPanelLeft() - 18), height - 18, 16, 16);
 		int pageCount = Math.max(1, (ForestManager.size() + rootsPerPage() - 1) / rootsPerPage());
 		page = Mth.clamp(page, 0, pageCount - 1);
@@ -149,8 +159,8 @@ public class ForestScreen extends BoMScreen {
 			rootLayoutToggle = Bounds.EMPTY;
 		}
 		clampRootListScroll();
-		if (BoM.tree != null) {
-			TreeVolume volume = forest$addNewNodes(BoM.tree.goal, BoM.tree.batches, 1, 0, ChanceState.DEFAULT);
+		if (selectedTree != null) {
+			TreeVolume volume = forest$addNewNodes(selectedTree.goal, selectedTree.batches, 1, 0, ChanceState.DEFAULT);
 			nodes = volume.nodes;
 			int horizontalOffset = (volume.getMaxRight() + volume.getMinLeft()) / 2;
 			for (Node node : volume.nodes) {
@@ -158,12 +168,12 @@ public class ForestScreen extends BoMScreen {
 			}
 			if (!volume.nodes.isEmpty()) {
 				Node node = volume.nodes.get(0);
-				int width = font.width("x" + BoM.tree.batches);
+				int width = font.width("x" + selectedTree.batches);
 				batches = new Bounds(node.x + node.width / 2 + 6, node.y - 10, width + 12, 22);
 			}
 
 			nodeWidth = volume.getMaxRight() - volume.getMinLeft();
-			nodeHeight = getNodeHeight(BoM.tree.goal);
+			nodeHeight = getNodeHeight(selectedTree.goal);
 			playerInv = minecraft.player == null ? null : EmiPlayerInventory.of(minecraft.player);
 			ForestCosts forestCosts = ForestCosts.calculateNew(ForestManager.getTrees(), playerInv);
 			TreeCost progressTreeCost = forestCosts.getProgress();
@@ -248,6 +258,8 @@ public class ForestScreen extends BoMScreen {
 			playerInv = null;
 		}
 		batcher.repopulate();
+		lastCalculatedTree = selectedTree;
+		lastCalculatedForestEmpty = forestEmpty;
 	}
 
 	private int rootsPerPage() {
@@ -319,6 +331,18 @@ public class ForestScreen extends BoMScreen {
 
 	@Override
 	public void render(GuiGraphics raw, int mouseX, int mouseY, float delta) {
+		MaterialTree selectedTree = ForestManager.getSelectedTree();
+		boolean forestEmpty = ForestManager.isEmpty();
+		boolean needsRecalculation = lastCalculatedTree != selectedTree
+			|| lastCalculatedForestEmpty != forestEmpty;
+		boolean currentAltLayout = EmiInput.isAltDown();
+		if (altLayout != currentAltLayout) {
+			altLayout = currentAltLayout;
+			needsRecalculation = true;
+		}
+		if (needsRecalculation) {
+			recalculateTree();
+		}
 		EmiDrawContext context = EmiDrawContext.wrap(raw);
 		this.renderDirtBackground(context.raw());
 		lastMouseX = mouseX;
@@ -443,7 +467,7 @@ public class ForestScreen extends BoMScreen {
 		if (!rootPanelHasContent()) {
 			return;
 		}
-		context.drawTexture(RECIPE_FOREST_ICON, panelLeft + 4, panelTop + 5, 0, 0, 0, 16, 16, 16, 16);
+		context.drawTexture(RECIPE_FOREST_WIDGETS, panelLeft + 4, panelTop + 5, 0, 0, 16, 16, 16, 64, 32);
 		boolean toggleHovered = rootLayoutToggle.contains(mouseX, mouseY);
 		context.fill(rootLayoutToggle.x(), rootLayoutToggle.y(), rootLayoutToggle.width(),
 			rootLayoutToggle.height(), toggleHovered ? 0xFF8099FF : 0xFF555555);
@@ -475,7 +499,7 @@ public class ForestScreen extends BoMScreen {
 			if (tree != null && tree.goal != null) {
 				tree.goal.ingredient.render(context.raw(), x + 1, y + 1, delta,
 					~(EmiIngredient.RENDER_AMOUNT | EmiIngredient.RENDER_REMAINDER));
-				EmiRenderHelper.renderAmount(context, x, y, EmiPort.literal("×" + tree.batches));
+				renderGridBatchAmount(context, x, y, tree.batches);
 			}
 			context.fill(x + 12, y, 6, 6, 0xFF8C2020);
 			context.drawTextWithShadow(EmiPort.literal("×"), x + 12, y - 2, 0xFFFFFFFF);
@@ -488,6 +512,17 @@ public class ForestScreen extends BoMScreen {
 			context.drawTextWithShadow(EmiPort.literal("›"), nextPage.x() + 4, nextPage.y() + 3,
 				nextPage.contains(mouseX, mouseY) ? 0xFF8099FF : 0xFFFFFFFF);
 		}
+	}
+
+	private void renderGridBatchAmount(EmiDrawContext context, int x, int y, long amount) {
+		Component text = EmiPort.literal(Long.toString(amount));
+		int textWidth = Math.max(1, font.width(text));
+		float textScale = Math.min(1, 14f / textWidth);
+		context.push();
+		context.matrices().translate(x + 17, y + 17, 0);
+		context.matrices().scale(textScale, textScale, 1);
+		context.drawTextWithShadow(text, -textWidth, -9, 0xFFFFFFFF);
+		context.pop();
 	}
 
 	private void renderRootList(EmiDrawContext context, int mouseX, int mouseY, float delta) {
@@ -511,33 +546,48 @@ public class ForestScreen extends BoMScreen {
 
 			MaterialTree tree = ForestManager.getTrees().get(index);
 			if (tree != null && tree.goal != null) {
-				tree.goal.ingredient.render(context.raw(), left + 3, y + 4, delta,
+				int itemLeft = rootListItemLeft();
+				tree.goal.ingredient.render(context.raw(), itemLeft, y + 4, delta,
 					~(EmiIngredient.RENDER_AMOUNT | EmiIngredient.RENDER_REMAINDER));
-				int controlsLeft = rootListControlsLeft();
-				int textWidth = Math.max(0, controlsLeft - (left + 22));
+				int textLeft = itemLeft + 18;
+				int textWidth = Math.max(0, rootListControlBounds(y, 2).x() - 2 - textLeft);
 				String batchesText = "×" + tree.batches;
 				String clipped = font.plainSubstrByWidth(batchesText, textWidth);
-				context.drawTextWithShadow(EmiPort.literal(clipped), left + 22, y + 8, 0xFFFFFFFF);
+				context.drawTextWithShadow(EmiPort.literal(clipped), textLeft, y + 8, 0xFFFFFFFF);
 			}
 
 			renderRootListControl(context, rootListControlBounds(y, 0), "−", canDecrementRootListBatch(tree),
-				mouseX, mouseY);
-			renderRootListControl(context, rootListControlBounds(y, 1), "+", true, mouseX, mouseY);
-			renderRootListControl(context, rootListControlBounds(y, 2), "↑", index > 0, mouseX, mouseY);
+				false, mouseX, mouseY);
+			renderRootListControl(context, rootListControlBounds(y, 1), "+", true, false, mouseX, mouseY);
+			renderRootListControl(context, rootListControlBounds(y, 2), "↑", index > 0, false, mouseX, mouseY);
 			renderRootListControl(context, rootListControlBounds(y, 3), "↓", index + 1 < ForestManager.size(),
-				mouseX, mouseY);
-			renderRootListControl(context, rootListControlBounds(y, 4), "×", true, mouseX, mouseY);
+				false, mouseX, mouseY);
+			renderRootListControl(context, rootListControlBounds(y, 4), "×", true, true, mouseX, mouseY);
 		}
 		context.raw().disableScissor();
 	}
 
-	private int rootListControlsLeft() {
-		return rootPanelLeft() + rootPanelWidth() - 4 - ROOT_LIST_CONTROL_WIDTH * ROOT_LIST_CONTROL_COUNT;
+	private int rootListItemLeft() {
+		return rootPanelLeft() + 4 + ROOT_LIST_CONTROL_WIDTH + 2;
 	}
 
 	private Bounds rootListControlBounds(int rowY, int slot) {
-		return new Bounds(rootListControlsLeft() + slot * ROOT_LIST_CONTROL_WIDTH, rowY + 5,
-			ROOT_LIST_CONTROL_WIDTH, 14);
+		int left = rootPanelLeft() + 5;
+		int right = rootPanelLeft() + rootPanelWidth() - 4;
+		int deleteLeft = right - ROOT_LIST_RIGHT_MARGIN - ROOT_LIST_CONTROL_WIDTH;
+		int arrowLeft = deleteLeft - ROOT_LIST_CONTROL_GAP - ROOT_LIST_CONTROL_WIDTH;
+		return switch (slot) {
+			case 0 -> new Bounds(left, rowY + 13, ROOT_LIST_CONTROL_WIDTH,
+				ROOT_LIST_STACKED_CONTROL_HEIGHT);
+			case 1 -> new Bounds(left, rowY + 2, ROOT_LIST_CONTROL_WIDTH,
+				ROOT_LIST_STACKED_CONTROL_HEIGHT);
+			case 2 -> new Bounds(arrowLeft, rowY + 2, ROOT_LIST_CONTROL_WIDTH,
+				ROOT_LIST_STACKED_CONTROL_HEIGHT);
+			case 3 -> new Bounds(arrowLeft, rowY + 13, ROOT_LIST_CONTROL_WIDTH,
+				ROOT_LIST_STACKED_CONTROL_HEIGHT);
+			case 4 -> new Bounds(deleteLeft, rowY + 6, ROOT_LIST_CONTROL_WIDTH, 12);
+			default -> Bounds.EMPTY;
+		};
 	}
 
 	private boolean canDecrementRootListBatch(MaterialTree tree) {
@@ -548,12 +598,15 @@ public class ForestScreen extends BoMScreen {
 	}
 
 	private void renderRootListControl(EmiDrawContext context, Bounds bounds, String label, boolean enabled,
-			int mouseX, int mouseY) {
+			boolean danger, int mouseX, int mouseY) {
 		boolean hovered = enabled && bounds.contains(mouseX, mouseY);
-		context.fill(bounds.x(), bounds.y(), bounds.width(), bounds.height(), enabled
-			? hovered ? 0xFF8099FF : 0xFF555555 : 0xFF333333);
+		int background = danger
+			? enabled ? hovered ? 0xFFDD5555 : 0xFF8C2020 : 0xFF4A1818
+			: enabled ? hovered ? 0xFF8099FF : 0xFF555555 : 0xFF333333;
+		int text = danger ? enabled ? 0xFFFFFFFF : 0xFFAA5555 : enabled ? 0xFFFFFFFF : 0xFF777777;
+		context.fill(bounds.x(), bounds.y(), bounds.width(), bounds.height(), background);
 		context.drawCenteredTextWithShadow(EmiPort.literal(label), bounds.x() + bounds.width() / 2,
-			bounds.y() + 3, enabled ? 0xFFFFFFFF : 0xFF777777);
+			bounds.y() + Math.max(0, (bounds.height() - 8) / 2), text);
 	}
 
 	public int getNodeHeight(MaterialNode node) {
@@ -697,6 +750,39 @@ public class ForestScreen extends BoMScreen {
 		return false;
 	}
 
+	private boolean applyPreferredResolution(Hover hover) {
+		EmiRecipe recipe = hover.node == null ? null : hover.node.recipe;
+		if (recipe != null && recipe.supportsRecipeTree()) {
+			ForestManager.addResolution(hover.stack, recipe, ForestBookmarks.getResolutionScope());
+			return true;
+		}
+		return getAutoResolutions(hover,
+			(ingredient, preferred) -> ForestManager.addResolution(ingredient, preferred,
+				ForestBookmarks.getResolutionScope()));
+	}
+
+	private void openResolutionPicker(Hover hover, ResolutionScope pendingScope) {
+		ForestManager.cancelPendingResolution();
+		EmiApi.displayRecipes(hover.stack);
+		Minecraft client = Minecraft.getInstance();
+		if (!(client.screen instanceof RecipeScreen recipeScreen)) {
+			ForestManager.cancelPendingResolution();
+			return;
+		}
+		if (pendingScope != null) {
+			ForestManager.beginPendingResolution(hover.stack, pendingScope);
+		}
+		RecipeScreen.resolve = hover.stack;
+		// The first init doesn't realize a resolution exists so we do it again. What
+		// could go wrong.
+		recipeScreen.init(client, recipeScreen.width, recipeScreen.height);
+		if (hover.node != null) {
+			if (hover.node.recipe != null) {
+				EmiApi.focusRecipe(hover.node.recipe);
+			}
+		}
+	}
+
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
 		if (button == 0 || button == 2) {
@@ -731,32 +817,16 @@ public class ForestScreen extends BoMScreen {
 			if (hover.stack != null) {
 				if (EmiInput.isShiftDown() && button == 0) {
 					ForestManager.cancelPendingResolution();
-					if (getAutoResolutions(hover,
-						(ingredient, recipe) -> ForestManager.addResolution(ingredient, recipe,
-							ForestBookmarks.getResolutionScope()))) {
+					if (applyPreferredResolution(hover)) {
 						recalculateTree();
+					} else {
+						openResolutionPicker(hover, ForestBookmarks.getResolutionScope());
 					}
 					return true;
 				} else {
 					if (button == 0) {
-						ForestManager.cancelPendingResolution();
-						EmiApi.displayRecipes(hover.stack);
-						Minecraft client = Minecraft.getInstance();
-						if (!(client.screen instanceof RecipeScreen recipeScreen)) {
-							return true;
-						}
-						RecipeScreen.resolve = hover.stack;
-						// The first init doesn't realize a resolution exists so we do it again. What
-						// could go wrong.
-						recipeScreen.init(client, recipeScreen.width, recipeScreen.height);
-						if (hover.node != null) {
-							if (hover.node.recipe != null) {
-								EmiApi.focusRecipe(hover.node.recipe);
-							}
-						} else {
-							ForestManager.beginPendingResolution(hover.stack,
-								ForestBookmarks.getResolutionScope());
-						}
+						openResolutionPicker(hover,
+							hover.node == null ? ForestBookmarks.getResolutionScope() : null);
 						return true;
 					}
 				}
@@ -814,13 +884,9 @@ public class ForestScreen extends BoMScreen {
 					} else if (rootListControlBounds(rowY, 1).contains((int) mouseX, (int) mouseY)) {
 						adjustRootListBatch(index, 1);
 					} else if (rootListControlBounds(rowY, 2).contains((int) mouseX, (int) mouseY)) {
-						if (index > 0) {
-							ForestManager.move(index, index - 1);
-						}
+						moveRootListEntry(index, -1);
 					} else if (rootListControlBounds(rowY, 3).contains((int) mouseX, (int) mouseY)) {
-						if (index + 1 < ForestManager.size()) {
-							ForestManager.move(index, index + 1);
-						}
+						moveRootListEntry(index, 1);
 					} else if (rootListControlBounds(rowY, 4).contains((int) mouseX, (int) mouseY)) {
 						ForestManager.remove(index);
 					} else {
@@ -869,6 +935,22 @@ public class ForestScreen extends BoMScreen {
 		return true;
 	}
 
+	private void moveRootListEntry(int index, int direction) {
+		if (index < 0 || index >= ForestManager.size() || direction == 0) {
+			return;
+		}
+		int target;
+		if (EmiInput.isShiftDown()) {
+			target = direction < 0 ? 0 : ForestManager.size() - 1;
+		} else {
+			int distance = EmiInput.isAltDown() ? 10 : EmiInput.isControlDown() ? 5 : 1;
+			target = Mth.clamp(index + direction * distance, 0, ForestManager.size() - 1);
+		}
+		if (target != index) {
+			ForestManager.move(index, target);
+		}
+	}
+
 	private void adjustRootListBatch(int index, long amount) {
 		if (index < 0 || index >= ForestManager.size()) {
 			return;
@@ -888,13 +970,25 @@ public class ForestScreen extends BoMScreen {
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
 		if (rootPanelContains(mouseX, mouseY)) {
-			if (ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST
-					&& mouseY >= rootListTop() && mouseY < rootListBottom()) {
-				rootListScroll -= (int) Math.round(amount * ROOT_LIST_ROW_HEIGHT);
-				clampRootListScroll();
+			int index = ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.GRID
+				? rootGridIndexAt(mouseX, mouseY) : rootListBatchIndexAt(mouseX, mouseY);
+			if (index >= 0) {
+				long adjustment = consumeRootBatchScroll(index, amount);
+				if (adjustment != 0) {
+					adjustRootListBatch(index, adjustment);
+					recalculateTree();
+				}
+			} else {
+				resetRootBatchScroll();
+				if (ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST
+						&& mouseY >= rootListTop() && mouseY < rootListBottom()) {
+					rootListScroll -= (int) Math.round(amount * ROOT_LIST_ROW_HEIGHT);
+					clampRootListScroll();
+				}
 			}
 			return true;
 		}
+		resetRootBatchScroll();
 		scrollAcc += amount;
 		amount = (int) scrollAcc;
 		scrollAcc %= 1;
@@ -910,6 +1004,54 @@ public class ForestScreen extends BoMScreen {
 		}
 		zoom += (int) amount;
 		return true;
+	}
+
+	private int rootGridIndexAt(double mouseX, double mouseY) {
+		int columns = rootColumns();
+		int rows = rootRows();
+		int left = rootPanelLeft() + (rootPanelWidth() - columns * ROOT_CELL_SIZE) / 2;
+		int localX = (int) mouseX - left;
+		int localY = (int) mouseY - rootPanelTop() - ROOT_PANEL_HEADER_HEIGHT;
+		if (localX < 0 || localY < 0 || localX >= columns * ROOT_CELL_SIZE
+				|| localY >= rows * ROOT_CELL_SIZE
+				|| localX % ROOT_CELL_SIZE >= 18 || localY % ROOT_CELL_SIZE >= 18) {
+			return -1;
+		}
+		int index = page * rootsPerPage()
+			+ localY / ROOT_CELL_SIZE * columns + localX / ROOT_CELL_SIZE;
+		return index < ForestManager.size() ? index : -1;
+	}
+
+	private int rootListBatchIndexAt(double mouseX, double mouseY) {
+		if (mouseY < rootListTop() || mouseY >= rootListBottom()) {
+			return -1;
+		}
+		int index = ((int) mouseY - rootListTop() + rootListScroll) / ROOT_LIST_ROW_HEIGHT;
+		if (index < 0 || index >= ForestManager.size()) {
+			return -1;
+		}
+		int rowY = rootListTop() + index * ROOT_LIST_ROW_HEIGHT - rootListScroll;
+		Bounds minus = rootListControlBounds(rowY, 0);
+		int right = rootListControlBounds(rowY, 2).x() - ROOT_LIST_CONTROL_GAP;
+		Bounds batchRegion = new Bounds(minus.x(), rowY + 1, Math.max(0, right - minus.x()),
+			ROOT_LIST_ROW_HEIGHT - 2);
+		return batchRegion.contains((int) mouseX, (int) mouseY) ? index : -1;
+	}
+
+	private long consumeRootBatchScroll(int index, double amount) {
+		if (rootBatchScrollIndex != index) {
+			rootBatchScrollAcc = 0;
+			rootBatchScrollIndex = index;
+		}
+		rootBatchScrollAcc += amount;
+		long adjustment = (long) rootBatchScrollAcc;
+		rootBatchScrollAcc %= 1;
+		return adjustment;
+	}
+
+	private void resetRootBatchScroll() {
+		rootBatchScrollAcc = 0;
+		rootBatchScrollIndex = -1;
 	}
 
 	private void adjustBatch(MaterialTree tree, long amount) {
@@ -991,9 +1133,11 @@ public class ForestScreen extends BoMScreen {
 		}
 
 		public int getReservedAmountOverflow() {
-			int altOverflow = ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
+			if (!altLayout) {
+				return EmiRenderHelper.getAmountOverflow(getAmountText(false));
+			}
+			return ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
 				? getCostQuantityIconWidth(this) : EmiRenderHelper.getAmountOverflow(getAmountText(true));
-			return Math.max(EmiRenderHelper.getAmountOverflow(getAmountText(false)), altOverflow);
 		}
 
 		private Component getAmountText(boolean decomposed) {
@@ -1106,7 +1250,7 @@ public class ForestScreen extends BoMScreen {
 	}
 
 	private int renderQuantityUnit(EmiDrawContext context, int x, int y, int u, long count, long capacity) {
-		context.drawTexture(QUANTITY_UNITS, x, y, 0, u, 0, 16, 16, 64, 16);
+		context.drawTexture(RECIPE_FOREST_WIDGETS, x, y, 0, u, 0, 16, 16, 64, 32);
 		String countText = Long.toString(count);
 		context.drawTextWithShadow(EmiPort.literal(countText), x + 16, y + 7, 0xFFFFFFFF);
 		int cursor = x + 16 + font.width(countText);
@@ -1239,9 +1383,13 @@ public class ForestScreen extends BoMScreen {
 			this.x = x;
 			this.y = y;
 			this.chance = chance;
-			int altOverflow = ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
-				? getQuantityIconWidth() : EmiRenderHelper.getAmountOverflow(getAmountText(true));
-			int tw = Math.max(EmiRenderHelper.getAmountOverflow(getAmountText(false)), altOverflow);
+			int tw;
+			if (altLayout) {
+				tw = ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON
+					? getQuantityIconWidth() : EmiRenderHelper.getAmountOverflow(getAmountText(true));
+			} else {
+				tw = EmiRenderHelper.getAmountOverflow(getAmountText(false));
+			}
 			width += tw;
 			midOffset = tw / -2;
 		}

@@ -81,9 +81,15 @@ public final class EmiCompatibility {
                 requireField(targetClass, "craftingMode", "Z", true, missing);
                 requireMethod(targetClass, "setGoal", "(Ldev/emi/emi/api/recipe/EmiRecipe;)V", true, missing);
             }
-            case "dev.emi.emi.bom.MaterialTree" -> requireMethod(targetClass, "addResolution",
-                    "(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/recipe/EmiRecipe;)V", false,
-                    missing);
+            case "dev.emi.emi.bom.MaterialTree" -> {
+                requireMethod(targetClass, "<init>", "(Ldev/emi/emi/api/recipe/EmiRecipe;)V", false, missing);
+                requireField(targetClass, "goal", "Ldev/emi/emi/bom/MaterialNode;", false, missing);
+                requireField(targetClass, "resolutions", "Ljava/util/Map;", false, missing);
+                requireField(targetClass, "batches", "J", false, missing);
+                requireMethod(targetClass, "addResolution",
+                        "(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/recipe/EmiRecipe;)V", false,
+                        missing);
+            }
             case "dev.emi.emi.widget.RecipeTreeButtonWidget" -> {
                 requireMethod(targetClass, "<init>", "(IILdev/emi/emi/api/recipe/EmiRecipe;)V", false, missing);
                 requireMethod(targetClass, "mouseClicked", "(III)Z", false, missing);
@@ -92,6 +98,7 @@ public final class EmiCompatibility {
             case "dev.emi.emi.runtime.EmiReloadManager" -> {
                 requireMethod(targetClass, "clear", "()V", true, missing);
                 requireMethod(targetClass, "reload", "()V", true, missing);
+                requireMethod(targetClass, "isLoaded", "()Z", true, missing);
             }
             case "dev.emi.emi.runtime.EmiFavorites" -> requireMethod(targetClass, "updateSynthetic",
                     "(Ldev/emi/emi/api/recipe/EmiPlayerInventory;)V", true, missing);
@@ -100,10 +107,10 @@ public final class EmiCompatibility {
             case "dev.emi.emi.screen.widget.EmiSearchWidget" ->
                     requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
             case "dev.emi.emi.screen.ConfigScreen" -> {
+                requireField(targetClass, "list", "Ldev/emi/emi/screen/widget/config/ListWidget;", false, missing);
+                requirePrivateField(targetClass, "search",
+                        "Ldev/emi/emi/screen/widget/config/ConfigSearch;", false, missing);
                 requireProtectedMethod(targetClass, "init", "()V", false, missing);
-                requireMethod(targetClass, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V", false,
-                        missing);
-                requireMethod(targetClass, "mouseClicked", "(DDI)Z", false, missing);
                 requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
                 requireMethod(targetClass, "keyReleased", "(III)Z", false, missing);
             }
@@ -118,6 +125,8 @@ public final class EmiCompatibility {
                 requireMethod(targetClass, "viewRecipeTree", "()V", true, missing);
                 requireMethod(targetClass, "getHandledScreen",
                         "()Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;", true, missing);
+                requireMethod(targetClass, "getRecipeManager",
+                        "()Ldev/emi/emi/api/recipe/EmiRecipeManager;", true, missing);
                 requireNewInstructions(targetClass, "viewRecipeTree", "()V",
                         "dev/emi/emi/screen/BoMScreen", 2, missing);
             }
@@ -266,6 +275,22 @@ public final class EmiCompatibility {
         missing.add((owner == null ? "<missing-class>" : owner.name) + '.' + name + ':' + descriptor);
     }
 
+    private static void requirePrivateField(ClassNode owner, String name, String descriptor, boolean requireStatic,
+            List<String> missing) {
+        if (owner != null) {
+            for (FieldNode field : owner.fields) {
+                int visibility = field.access & (Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED | Opcodes.ACC_PRIVATE);
+                if (field.name.equals(name) && field.desc.equals(descriptor)
+                        && visibility == Opcodes.ACC_PRIVATE
+                        && ((field.access & Opcodes.ACC_STATIC) != 0) == requireStatic) {
+                    return;
+                }
+            }
+        }
+        missing.add((owner == null ? "<missing-class>" : owner.name) + '.' + name + ':' + descriptor
+                + " [private]");
+    }
+
     private static CatalystAccess resolveCatalystAccess() {
         try {
             Field field = MaterialNode.class.getField("catalyst");
@@ -305,10 +330,24 @@ public final class EmiCompatibility {
             ClassNode sizedButton = readClass("dev/emi/emi/screen/widget/SizedButtonWidget", missing);
             ClassNode materialTree = readClass("dev/emi/emi/bom/MaterialTree", missing);
             ClassNode recipeScreen = readClass("dev/emi/emi/screen/RecipeScreen", missing);
+            ClassNode reloadManager = readClass("dev/emi/emi/runtime/EmiReloadManager", missing);
             ClassNode configScreen = readClass("dev/emi/emi/screen/ConfigScreen", missing);
+            ClassNode configList = readClass("dev/emi/emi/screen/widget/config/ListWidget", missing);
+            ClassNode configGroup = readClass("dev/emi/emi/screen/widget/config/GroupNameWidget", missing);
+            ClassNode configEntry = readClass("dev/emi/emi/screen/widget/config/ConfigEntryWidget", missing);
+            ClassNode configSearch = readClass("dev/emi/emi/screen/widget/config/ConfigSearch", missing);
             ClassNode screenManager = readClass("dev/emi/emi/screen/EmiScreenManager", missing);
             ClassNode emiInput = readClass("dev/emi/emi/input/EmiInput", missing);
             ClassNode stackInteraction = readClass("dev/emi/emi/api/stack/EmiStackInteraction", missing);
+            ClassNode emiApi = readClass("dev/emi/emi/api/EmiApi", missing);
+            ClassNode recipeManager = readClass("dev/emi/emi/api/recipe/EmiRecipeManager", missing);
+            ClassNode emiUtil = readClass("dev/emi/emi/EmiUtil", missing);
+            ClassNode ingredientSerializer = readClass(
+                    "dev/emi/emi/api/stack/serializer/EmiIngredientSerializer", missing);
+            ClassNode resolutionRecipe = readClass("dev/emi/emi/api/recipe/EmiResolutionRecipe", missing);
+            ClassNode emiRecipe = readClass("dev/emi/emi/api/recipe/EmiRecipe", missing);
+            ClassNode emiIngredient = readClass("dev/emi/emi/api/stack/EmiIngredient", missing);
+            ClassNode emiPort = readClass("dev/emi/emi/EmiPort", missing);
 
             boolean modernCatalyst = hasPublicField(materialNode, "catalyst", "Z", false);
             boolean legacyCatalyst = hasPublicMethod(treeCost, "isCatalyst",
@@ -338,15 +377,43 @@ public final class EmiCompatibility {
                     "(IIIIIILjava/util/function/BooleanSupplier;"
                             + "Lnet/minecraft/client/gui/components/Button$OnPress;Ljava/util/List;)V",
                     false, missing);
+            requireMethod(materialTree, "<init>", "(Ldev/emi/emi/api/recipe/EmiRecipe;)V", false, missing);
+            requireField(materialTree, "goal", "Ldev/emi/emi/bom/MaterialNode;", false, missing);
+            requireField(materialTree, "resolutions", "Ljava/util/Map;", false, missing);
+            requireField(materialTree, "batches", "J", false, missing);
             requireMethod(materialTree, "addResolution",
                     "(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/recipe/EmiRecipe;)V", false,
                     missing);
+            requireField(materialNode, "recipe", "Ldev/emi/emi/api/recipe/EmiRecipe;", false, missing);
+            requireField(materialNode, "children", "Ljava/util/List;", false, missing);
+            requireField(materialNode, "state", "Ldev/emi/emi/bom/FoldState;", false, missing);
+            requireMethod(reloadManager, "isLoaded", "()Z", true, missing);
             requireMethod(recipeScreen, "<init>",
                     "(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;Ljava/util/Map;)V",
                     false, missing);
             requireMethod(recipeScreen, "onClose", "()V", false, missing);
             requireField(recipeScreen, "resolve", "Ldev/emi/emi/api/stack/EmiIngredient;", true, missing);
+            requireField(configScreen, "list", "Ldev/emi/emi/screen/widget/config/ListWidget;", false, missing);
+            requirePrivateField(configScreen, "search",
+                    "Ldev/emi/emi/screen/widget/config/ConfigSearch;", false, missing);
+            requireProtectedMethod(configScreen, "init", "()V", false, missing);
+            requireMethod(configScreen, "keyPressed", "(III)Z", false, missing);
             requireMethod(configScreen, "keyReleased", "(III)Z", false, missing);
+            requireMethod(configList, "children", "()Ljava/util/List;", false, missing);
+            requireMethod(configList, "addEntry",
+                    "(Ldev/emi/emi/screen/widget/config/ListWidget$Entry;)I", false, missing);
+            requireMethod(configGroup, "<init>",
+                    "(Ljava/lang/String;Lnet/minecraft/network/chat/Component;)V", false, missing);
+            requireField(configGroup, "id", "Ljava/lang/String;", false, missing);
+            requireField(configGroup, "children", "Ljava/util/List;", false, missing);
+            requireField(configGroup, "collapsed", "Z", false, missing);
+            requireMethod(configEntry, "<init>",
+                    "(Lnet/minecraft/network/chat/Component;Ljava/util/List;Ljava/util/function/Supplier;I)V",
+                    false, missing);
+            requireMethod(configEntry, "setChildren", "(Ljava/util/List;)V", false, missing);
+            requireMethod(configEntry, "update", "(IIII)V", false, missing);
+            requireField(configEntry, "parentGroups", "Ljava/util/List;", false, missing);
+            requireMethod(configSearch, "getSearch", "()Ljava/lang/String;", false, missing);
             requireMethod(screenManager, "keyPressed", "(III)Z", true, missing);
             requireMethod(screenManager, "getHoveredStack",
                     "(IIZ)Ldev/emi/emi/api/stack/EmiStackInteraction;", true, missing);
@@ -355,11 +422,37 @@ public final class EmiCompatibility {
             requireField(screenManager, "lastMouseX", "I", true, missing);
             requireField(screenManager, "lastMouseY", "I", true, missing);
             requireMethod(emiInput, "getCurrentModifiers", "()I", true, missing);
+            requireField(emiInput, "SHIFT_MASK", "I", true, missing);
             requireMethod(stackInteraction, "isEmpty", "()Z", false, missing);
             requireMethod(stackInteraction, "getRecipeContext",
                     "()Ldev/emi/emi/api/recipe/EmiRecipe;", false, missing);
             requireMethod(stackInteraction, "getStack",
                     "()Ldev/emi/emi/api/stack/EmiIngredient;", false, missing);
+            requireMethod(emiApi, "getRecipeManager",
+                    "()Ldev/emi/emi/api/recipe/EmiRecipeManager;", true, missing);
+            requireMethod(recipeManager, "getRecipesByOutput",
+                    "(Ldev/emi/emi/api/stack/EmiStack;)Ljava/util/List;", false, missing);
+            requireMethod(recipeManager, "getRecipe",
+                    "(Lnet/minecraft/resources/ResourceLocation;)Ldev/emi/emi/api/recipe/EmiRecipe;",
+                    false, missing);
+            requireMethod(emiUtil, "getPreferredRecipe",
+                    "(Ljava/util/List;Ldev/emi/emi/api/recipe/EmiPlayerInventory;Z)"
+                            + "Ldev/emi/emi/api/recipe/EmiRecipe;",
+                    true, missing);
+            requireMethod(ingredientSerializer, "getSerialized",
+                    "(Ldev/emi/emi/api/stack/EmiIngredient;)Lcom/google/gson/JsonElement;", true, missing);
+            requireMethod(ingredientSerializer, "getDeserialized",
+                    "(Lcom/google/gson/JsonElement;)Ldev/emi/emi/api/stack/EmiIngredient;", true, missing);
+            requireMethod(resolutionRecipe, "<init>",
+                    "(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/stack/EmiStack;)V",
+                    false, missing);
+            requireField(resolutionRecipe, "stack", "Ldev/emi/emi/api/stack/EmiStack;", false, missing);
+            requireMethod(emiRecipe, "getId", "()Lnet/minecraft/resources/ResourceLocation;", false, missing);
+            requireMethod(emiRecipe, "supportsRecipeTree", "()Z", false, missing);
+            requireMethod(emiIngredient, "isEmpty", "()Z", false, missing);
+            requireMethod(emiIngredient, "getEmiStacks", "()Ljava/util/List;", false, missing);
+            requireMethod(emiPort, "id",
+                    "(Ljava/lang/String;)Lnet/minecraft/resources/ResourceLocation;", true, missing);
 
             if (!missing.isEmpty()) {
                 throw incompatibleContracts(currentVersion(), "runtime preflight", missing);

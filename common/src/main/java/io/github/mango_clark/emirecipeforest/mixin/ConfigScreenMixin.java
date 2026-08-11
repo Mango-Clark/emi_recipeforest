@@ -1,398 +1,203 @@
 package io.github.mango_clark.emirecipeforest.mixin;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
+
 import com.mojang.blaze3d.platform.InputConstants;
+
 import dev.emi.emi.screen.ConfigScreen;
+import dev.emi.emi.screen.widget.config.ConfigEntryWidget;
+import dev.emi.emi.screen.widget.config.ConfigSearch;
+import dev.emi.emi.screen.widget.config.GroupNameWidget;
+import dev.emi.emi.screen.widget.config.ListWidget;
+import dev.emi.emi.screen.widget.config.ListWidget.Entry;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
-import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.QuantityMode;
-import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.RootLayout;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Adds RecipeForest settings as a modal within EMI's existing config screen. */
+/** Adds RecipeForest settings to EMI's native configuration list. */
 @Mixin(value = ConfigScreen.class, remap = false)
 public abstract class ConfigScreenMixin extends Screen {
     @Unique
-    private static final int RECIPE_FOREST$PANEL_WIDTH = 300;
+    private static final String RECIPE_FOREST$GROUP_ID = "recipeforest";
     @Unique
-    private static final int RECIPE_FOREST$PANEL_HEIGHT = 250;
+    private static final int RECIPE_FOREST$CONTROL_WIDTH = 150;
     @Unique
-    private static final int RECIPE_FOREST$ROW_HEIGHT = 21;
+    private static final int RECIPE_FOREST$BUTTON_HEIGHT = 20;
+
+    @Shadow
+    public ListWidget list;
+    @Shadow
+    private ConfigSearch search;
+
     @Unique
-    private boolean recipeForest$settingsOpen;
+    private boolean recipeForest$groupCollapsed;
     @Unique
     private boolean recipeForest$capturingKey;
     @Unique
-    private boolean recipeForest$consumeNextMouseRelease;
-    @Unique
     private boolean recipeForest$consumeNextKeyRelease;
     @Unique
-    private int recipeForest$scrollOffset;
+    private boolean recipeForest$keyConflict;
 
     protected ConfigScreenMixin(Component title) {
         super(title);
     }
 
-    @Inject(method = "init", at = @At("RETURN"))
-    private void recipeForest$addSettingsLauncher(CallbackInfo ci) {
-        int buttonWidth = Math.min(140, Math.max(20, width - 8));
-        addRenderableWidget(Button.builder(Component.translatable("tooltip.emi_recipeforest.settings"), button -> {
-            recipeForest$settingsOpen = true;
-            recipeForest$capturingKey = false;
-        }).bounds(Math.max(4, width - buttonWidth - 4), 6, buttonWidth, 20).build());
-    }
-
-    @Inject(method = "render", at = @At("TAIL"))
-    private void recipeForest$renderSettings(GuiGraphics graphics, int mouseX, int mouseY, float delta,
-            CallbackInfo ci) {
-        if (!recipeForest$settingsOpen) {
+    @Inject(method = "init", at = @At("HEAD"))
+    private void recipeForest$rememberGroupState(CallbackInfo ci) {
+        recipeForest$capturingKey = false;
+        recipeForest$consumeNextKeyRelease = false;
+        recipeForest$keyConflict = false;
+        if (ForestBookmarks.getForestKeyCode() == GLFW.GLFW_KEY_R) {
+            ForestBookmarks.setForestKeyCode(ForestBookmarks.DEFAULT_FOREST_KEY_CODE);
+        }
+        if (list == null) {
             return;
         }
-
-        int left = recipeForest$panelLeft();
-        int top = recipeForest$panelTop();
-        int panelWidth = recipeForest$panelWidth();
-        int panelHeight = recipeForest$panelHeight();
-        graphics.fill(0, 0, width, height, 0xA0000000);
-        graphics.fill(left, top, left + panelWidth, top + panelHeight, 0xFF8099FF);
-        graphics.fill(left + 1, top + 1, left + panelWidth - 1, top + panelHeight - 1, 0xFF202020);
-        graphics.drawCenteredString(font, Component.translatable("screen.emi_recipeforest.settings.title"),
-                width / 2, top + 10, 0xFFFFFFFF);
-
-        recipeForest$clampScroll();
-        graphics.enableScissor(left + 2, recipeForest$contentTop(), left + panelWidth - 2,
-                recipeForest$contentBottom());
-        int row = 0;
-        recipeForest$renderValueRow(graphics, mouseX, mouseY, row++,
-                Component.translatable("screen.emi_recipeforest.settings.resolution_scope"),
-                recipeForest$enumLabel("resolution_scope", ForestBookmarks.getResolutionScope()));
-        recipeForest$renderValueRow(graphics, mouseX, mouseY, row++,
-                Component.translatable("screen.emi_recipeforest.settings.root_layout"),
-                recipeForest$enumLabel("root_layout", ForestBookmarks.getRootLayout()));
-        recipeForest$renderValueRow(graphics, mouseX, mouseY, row++,
-                Component.translatable("screen.emi_recipeforest.settings.quantity_mode"),
-                recipeForest$enumLabel("quantity_mode", ForestBookmarks.getQuantityMode()));
-        recipeForest$renderKeyRow(graphics, mouseX, mouseY, row++);
-        recipeForest$renderValueRow(graphics, mouseX, mouseY, row++,
-                Component.translatable("screen.emi_recipeforest.settings.box_enabled"),
-                Component.translatable(ForestBookmarks.isBoxEnabled()
-                        ? "screen.emi_recipeforest.settings.enabled"
-                        : "screen.emi_recipeforest.settings.disabled"));
-        recipeForest$renderStepperRow(graphics, mouseX, mouseY, row++,
-                Component.translatable("screen.emi_recipeforest.settings.stacks_per_box",
-                        ForestBookmarks.getStacksPerBox()),
-                ForestBookmarks.getStacksPerBox() > 1, ForestBookmarks.getStacksPerBox() < 256);
-        if (ForestBookmarks.getRootLayout() == RootLayout.GRID) {
-            recipeForest$renderStepperRow(graphics, mouseX, mouseY, row++,
-                    Component.translatable("screen.emi_recipeforest.settings.columns",
-                            ForestBookmarks.getRootGridColumns()),
-                    ForestBookmarks.getRootGridColumns() > 1, ForestBookmarks.getRootGridColumns() < 16);
-            recipeForest$renderStepperRow(graphics, mouseX, mouseY, row,
-                    Component.translatable("screen.emi_recipeforest.settings.rows",
-                            ForestBookmarks.getRootGridRows()),
-                    ForestBookmarks.getRootGridRows() > 1, ForestBookmarks.getRootGridRows() < 8);
-        }
-        graphics.disableScissor();
-
-        recipeForest$renderButton(graphics, recipeForest$doneLeft(), top + panelHeight - 25,
-                recipeForest$doneWidth(), 20, mouseX, mouseY, true,
-                Component.translatable("screen.emi_recipeforest.settings.done"));
-    }
-
-    @Unique
-    private void recipeForest$renderValueRow(GuiGraphics graphics, int mouseX, int mouseY, int row,
-            Component label, Component value) {
-        int y = recipeForest$rowY(row);
-        graphics.drawString(font, label, recipeForest$panelLeft() + 10, y + 6, 0xFFFFFFFF, false);
-        int valueLeft = recipeForest$valueLeft();
-        recipeForest$renderButton(graphics, valueLeft, y, recipeForest$valueWidth(), 20,
-                mouseX, mouseY, true, value);
-    }
-
-    @Unique
-    private void recipeForest$renderKeyRow(GuiGraphics graphics, int mouseX, int mouseY, int row) {
-        int y = recipeForest$rowY(row);
-        graphics.drawString(font, Component.translatable("screen.emi_recipeforest.settings.forest_key"),
-                recipeForest$panelLeft() + 10, y + 6, 0xFFFFFFFF, false);
-        Component key = recipeForest$capturingKey
-                ? Component.translatable("screen.emi_recipeforest.settings.forest_key.capture")
-                : InputConstants.Type.KEYSYM.getOrCreate(ForestBookmarks.getForestKeyCode()).getDisplayName();
-        int resetWidth = recipeForest$keyResetWidth();
-        recipeForest$renderButton(graphics, recipeForest$valueLeft(), y,
-                recipeForest$keyButtonWidth(), 20, mouseX, mouseY, true, key);
-        recipeForest$renderButton(graphics, recipeForest$valueLeft() + recipeForest$valueWidth() - resetWidth, y,
-                resetWidth, 20, mouseX, mouseY, true,
-                Component.translatable("screen.emi_recipeforest.settings.forest_key.reset"));
-    }
-
-    @Unique
-    private void recipeForest$renderStepperRow(GuiGraphics graphics, int mouseX, int mouseY, int row,
-            Component label, boolean canDecrease, boolean canIncrease) {
-        int y = recipeForest$rowY(row);
-        graphics.drawString(font, label, recipeForest$panelLeft() + 10, y + 6, 0xFFFFFFFF, false);
-        recipeForest$renderButton(graphics, recipeForest$panelLeft() + recipeForest$panelWidth() - 50, y,
-                20, 20, mouseX, mouseY, canDecrease,
-                Component.translatable("screen.emi_recipeforest.settings.columns.decrease"));
-        recipeForest$renderButton(graphics, recipeForest$panelLeft() + recipeForest$panelWidth() - 26, y,
-                20, 20, mouseX, mouseY, canIncrease,
-                Component.translatable("screen.emi_recipeforest.settings.columns.increase"));
-    }
-
-    @Unique
-    private void recipeForest$renderButton(GuiGraphics graphics, int x, int y, int buttonWidth, int buttonHeight,
-            int mouseX, int mouseY, boolean active, Component label) {
-        boolean hovered = active && recipeForest$contains(x, y, buttonWidth, buttonHeight, mouseX, mouseY);
-        int border = active ? (hovered ? 0xFFFFFFFF : 0xFF8099FF) : 0xFF555555;
-        int text = active ? 0xFFFFFFFF : 0xFF777777;
-        graphics.fill(x, y, x + buttonWidth, y + buttonHeight, border);
-        graphics.fill(x + 1, y + 1, x + buttonWidth - 1, y + buttonHeight - 1, 0xFF303030);
-        graphics.drawCenteredString(font, label, x + buttonWidth / 2, y + 6, text);
-    }
-
-    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
-    private void recipeForest$handleSettingsClick(double mouseX, double mouseY, int button,
-            CallbackInfoReturnable<Boolean> cir) {
-        if (!recipeForest$settingsOpen) {
-            return;
-        }
-        recipeForest$consumeNextMouseRelease = true;
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            recipeForest$clickSetting(mouseX, mouseY);
-        }
-        cir.setReturnValue(true);
-    }
-
-    @Unique
-    private void recipeForest$clickSetting(double mouseX, double mouseY) {
-        int row = recipeForest$rowAt(mouseX, mouseY);
-        if (row == 0 && recipeForest$inValue(mouseX, mouseY, row)) {
-            ForestBookmarks.setResolutionScope(recipeForest$next(ForestBookmarks.getResolutionScope()));
-        } else if (row == 1 && recipeForest$inValue(mouseX, mouseY, row)) {
-            ForestBookmarks.setRootLayout(recipeForest$next(ForestBookmarks.getRootLayout()));
-        } else if (row == 2 && recipeForest$inValue(mouseX, mouseY, row)) {
-            ForestBookmarks.setQuantityMode(recipeForest$next(ForestBookmarks.getQuantityMode()));
-        } else if (row == 3) {
-            int resetWidth = recipeForest$keyResetWidth();
-            int resetLeft = recipeForest$valueLeft() + recipeForest$valueWidth() - resetWidth;
-            if (recipeForest$contains(resetLeft, recipeForest$rowY(row), resetWidth, 20, mouseX, mouseY)) {
-                ForestBookmarks.setForestKeyCode(ForestBookmarks.DEFAULT_FOREST_KEY_CODE);
-                recipeForest$capturingKey = false;
-            } else if (recipeForest$contains(recipeForest$valueLeft(), recipeForest$rowY(row),
-                    recipeForest$keyButtonWidth(), 20, mouseX, mouseY)) {
-                recipeForest$capturingKey = true;
+        for (Entry entry : list.children()) {
+            if (entry instanceof GroupNameWidget group && RECIPE_FOREST$GROUP_ID.equals(group.id)) {
+                recipeForest$groupCollapsed = group.collapsed;
+                return;
             }
-        } else if (row == 4 && recipeForest$inValue(mouseX, mouseY, row)) {
-            ForestBookmarks.setBoxEnabled(!ForestBookmarks.isBoxEnabled());
-        } else if (row == 5) {
-            recipeForest$adjustStepper(mouseX, mouseY,
-                    () -> ForestBookmarks.setStacksPerBox(ForestBookmarks.getStacksPerBox() - 1),
-                    () -> ForestBookmarks.setStacksPerBox(ForestBookmarks.getStacksPerBox() + 1));
-        } else if (ForestBookmarks.getRootLayout() == RootLayout.GRID && row == 6) {
-            recipeForest$adjustStepper(mouseX, mouseY,
-                    () -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns() - 1,
-                            ForestBookmarks.getRootGridRows()),
-                    () -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns() + 1,
-                            ForestBookmarks.getRootGridRows()));
-        } else if (ForestBookmarks.getRootLayout() == RootLayout.GRID && row == 7) {
-            recipeForest$adjustStepper(mouseX, mouseY,
-                    () -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns(),
-                            ForestBookmarks.getRootGridRows() - 1),
-                    () -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns(),
-                            ForestBookmarks.getRootGridRows() + 1));
-        }
-
-        if (recipeForest$contains(recipeForest$doneLeft(),
-                recipeForest$panelTop() + recipeForest$panelHeight() - 25,
-                recipeForest$doneWidth(), 20, mouseX, mouseY)) {
-            recipeForest$settingsOpen = false;
-            recipeForest$capturingKey = false;
         }
     }
 
-    @Unique
-    private void recipeForest$adjustStepper(double mouseX, double mouseY, Runnable decrease, Runnable increase) {
-        int left = recipeForest$panelLeft() + recipeForest$panelWidth();
-        int row = recipeForest$rowAt(mouseX, mouseY);
-        int y = recipeForest$rowY(row);
-        if (recipeForest$contains(left - 50, y, 20, 20, mouseX, mouseY)) {
-            decrease.run();
-        } else if (recipeForest$contains(left - 26, y, 20, 20, mouseX, mouseY)) {
-            increase.run();
+    @Inject(method = "init", at = @At("RETURN"))
+    private void recipeForest$addSettingsGroup(CallbackInfo ci) {
+        List<Entry> entries = list.children();
+        int devIndex = -1;
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i) instanceof GroupNameWidget group && "dev".equals(group.id)) {
+                devIndex = i;
+                break;
+            }
         }
+        if (devIndex < 0) {
+            throw new IllegalStateException("Incompatible EMI config layout. RecipeForest supports EMI 1.1.13-1.1.24; "
+                    + "expected top-level ConfigScreen group id 'dev'.");
+        }
+
+        Supplier<String> currentSearch = () -> search.getSearch();
+        GroupNameWidget group = new GroupNameWidget(RECIPE_FOREST$GROUP_ID,
+                Component.translatable("screen.emi_recipeforest.settings.title"));
+        group.collapsed = recipeForest$groupCollapsed;
+
+        List<ConfigEntryWidget> settings = new ArrayList<>();
+        settings.add(new RecipeForestValueEntry(
+                Component.translatable("screen.emi_recipeforest.settings.resolution_scope"), currentSearch,
+                () -> recipeForest$enumLabel("resolution_scope", ForestBookmarks.getResolutionScope()),
+                () -> ForestBookmarks.setResolutionScope(recipeForest$next(ForestBookmarks.getResolutionScope()))));
+        settings.add(new RecipeForestValueEntry(
+                Component.translatable("screen.emi_recipeforest.settings.root_layout"), currentSearch,
+                () -> recipeForest$enumLabel("root_layout", ForestBookmarks.getRootLayout()),
+                () -> ForestBookmarks.setRootLayout(recipeForest$next(ForestBookmarks.getRootLayout()))));
+        settings.add(new RecipeForestValueEntry(
+                Component.translatable("screen.emi_recipeforest.settings.quantity_mode"), currentSearch,
+                () -> recipeForest$enumLabel("quantity_mode", ForestBookmarks.getQuantityMode()),
+                () -> ForestBookmarks.setQuantityMode(recipeForest$next(ForestBookmarks.getQuantityMode()))));
+        settings.add(new RecipeForestKeyEntry(currentSearch, () -> recipeForest$capturingKey,
+                () -> recipeForest$keyConflict, () -> {
+                    recipeForest$keyConflict = false;
+                    recipeForest$capturingKey = true;
+                }, () -> {
+                    ForestBookmarks.setForestKeyCode(ForestBookmarks.DEFAULT_FOREST_KEY_CODE);
+                    recipeForest$capturingKey = false;
+                    recipeForest$keyConflict = false;
+                }));
+        settings.add(new RecipeForestValueEntry(
+                Component.translatable("screen.emi_recipeforest.settings.box_enabled"), currentSearch,
+                () -> Component.translatable(ForestBookmarks.isBoxEnabled()
+                        ? "screen.emi_recipeforest.settings.enabled"
+                        : "screen.emi_recipeforest.settings.disabled"),
+                () -> ForestBookmarks.setBoxEnabled(!ForestBookmarks.isBoxEnabled())));
+        settings.add(new RecipeForestStepperEntry(
+                Component.translatable("screen.emi_recipeforest.settings.stacks_per_box", ""), currentSearch,
+                ForestBookmarks::getStacksPerBox, ForestBookmarks::setStacksPerBox, 1, 256, () -> true));
+        settings.add(new RecipeForestStepperEntry(
+                Component.translatable("screen.emi_recipeforest.settings.columns", ""), currentSearch,
+                ForestBookmarks::getRootGridColumns,
+                value -> ForestBookmarks.setRootGridSize(value, ForestBookmarks.getRootGridRows()),
+                1, 16, () -> ForestBookmarks.getRootLayout() == RootLayout.GRID));
+        settings.add(new RecipeForestStepperEntry(
+                Component.translatable("screen.emi_recipeforest.settings.rows", ""), currentSearch,
+                ForestBookmarks::getRootGridRows,
+                value -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns(), value),
+                1, 8, () -> ForestBookmarks.getRootLayout() == RootLayout.GRID));
+        settings.add(new RecipeForestValueEntry(
+                Component.translatable("screen.emi_recipeforest.settings.title"), currentSearch,
+                () -> Component.translatable("screen.emi_recipeforest.settings.forest_key.reset"),
+                this::recipeForest$resetSettings));
+
+        List<Entry> inserted = new ArrayList<>(settings.size() + 1);
+        inserted.add(group);
+        list.addEntry(group);
+        for (ConfigEntryWidget setting : settings) {
+            group.children.add(setting);
+            setting.parentGroups.add(group);
+            inserted.add(setting);
+            list.addEntry(setting);
+        }
+
+        entries.removeAll(inserted);
+        entries.addAll(devIndex, inserted);
+    }
+
+    @Unique
+    private void recipeForest$resetSettings() {
+        ForestBookmarks.setResolutionScope(ForestBookmarks.ResolutionScope.ALL_ROOTS);
+        ForestBookmarks.setRootLayout(RootLayout.LIST);
+        ForestBookmarks.setQuantityMode(ForestBookmarks.QuantityMode.ICON);
+        ForestBookmarks.setForestKeyCode(ForestBookmarks.DEFAULT_FOREST_KEY_CODE);
+        ForestBookmarks.setBoxEnabled(true);
+        ForestBookmarks.setStacksPerBox(27);
+        ForestBookmarks.setRootGridSize(8, 2);
+        recipeForest$capturingKey = false;
+        recipeForest$keyConflict = false;
     }
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
-    private void recipeForest$handleSettingsKey(int keyCode, int scanCode, int modifiers,
+    private void recipeForest$captureKey(int keyCode, int scanCode, int modifiers,
             CallbackInfoReturnable<Boolean> cir) {
-        if (!recipeForest$settingsOpen) {
+        if (!recipeForest$capturingKey) {
             return;
         }
         recipeForest$consumeNextKeyRelease = true;
-        if (recipeForest$capturingKey) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                recipeForest$capturingKey = false;
-            } else if (keyCode != GLFW.GLFW_KEY_UNKNOWN && !recipeForest$isModifier(keyCode)) {
-                ForestBookmarks.setForestKeyCode(keyCode);
-                recipeForest$capturingKey = false;
-            }
-        } else if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            recipeForest$settingsOpen = false;
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            recipeForest$capturingKey = false;
+            recipeForest$keyConflict = false;
+        } else if (keyCode == GLFW.GLFW_KEY_R) {
+            recipeForest$capturingKey = false;
+            recipeForest$keyConflict = true;
+        } else if (keyCode != GLFW.GLFW_KEY_UNKNOWN && !recipeForest$isModifier(keyCode)) {
+            ForestBookmarks.setForestKeyCode(keyCode);
+            recipeForest$capturingKey = false;
+            recipeForest$keyConflict = false;
         }
         cir.setReturnValue(true);
     }
 
     @Inject(method = "keyReleased", at = @At("HEAD"), cancellable = true)
-    private void recipeForest$consumeSettingsKeyRelease(int keyCode, int scanCode, int modifiers,
+    private void recipeForest$consumeCapturedKeyRelease(int keyCode, int scanCode, int modifiers,
             CallbackInfoReturnable<Boolean> cir) {
-        if (recipeForest$settingsOpen || recipeForest$consumeNextKeyRelease) {
+        if (recipeForest$capturingKey || recipeForest$consumeNextKeyRelease) {
             recipeForest$consumeNextKeyRelease = false;
             cir.setReturnValue(true);
         }
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (recipeForest$settingsOpen || recipeForest$consumeNextMouseRelease) {
-            recipeForest$consumeNextMouseRelease = false;
-            return true;
-        }
-        return super.mouseReleased(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (recipeForest$settingsOpen) {
-            return true;
-        }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
-        if (recipeForest$settingsOpen) {
-            if (amount != 0) {
-                recipeForest$scrollOffset -= (int) Math.signum(amount) * RECIPE_FOREST$ROW_HEIGHT;
-                recipeForest$clampScroll();
-            }
-            return true;
-        }
-        return super.mouseScrolled(mouseX, mouseY, amount);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        if (recipeForest$settingsOpen) {
-            return true;
-        }
-        return super.charTyped(codePoint, modifiers);
-    }
-
-    @Unique
-    private int recipeForest$rowAt(double mouseX, double mouseY) {
-        if (mouseX < recipeForest$panelLeft() || mouseX >= recipeForest$panelLeft() + recipeForest$panelWidth()) {
-            return -1;
-        }
-        if (mouseY < recipeForest$contentTop() || mouseY >= recipeForest$contentBottom()) {
-            return -1;
-        }
-        int row = (int) ((mouseY - recipeForest$contentTop() + recipeForest$scrollOffset)
-                / RECIPE_FOREST$ROW_HEIGHT);
-        return row <= recipeForest$lastRow() ? row : -1;
-    }
-
-    @Unique
-    private boolean recipeForest$inValue(double mouseX, double mouseY, int row) {
-        return recipeForest$contains(recipeForest$valueLeft(), recipeForest$rowY(row),
-                recipeForest$valueWidth(), 20, mouseX, mouseY);
-    }
-
-    @Unique
-    private int recipeForest$rowY(int row) {
-        return recipeForest$contentTop() + row * RECIPE_FOREST$ROW_HEIGHT - recipeForest$scrollOffset;
-    }
-
-    @Unique
-    private int recipeForest$contentTop() {
-        return recipeForest$panelTop() + 27;
-    }
-
-    @Unique
-    private int recipeForest$contentBottom() {
-        return Math.max(recipeForest$contentTop(),
-                recipeForest$panelTop() + recipeForest$panelHeight() - 28);
-    }
-
-    @Unique
-    private int recipeForest$lastRow() {
-        return ForestBookmarks.getRootLayout() == RootLayout.GRID ? 7 : 5;
-    }
-
-    @Unique
-    private void recipeForest$clampScroll() {
-        int contentHeight = Math.max(0, recipeForest$contentBottom() - recipeForest$contentTop());
-        int rowsHeight = (recipeForest$lastRow() + 1) * RECIPE_FOREST$ROW_HEIGHT;
-        recipeForest$scrollOffset = Math.max(0, Math.min(recipeForest$scrollOffset,
-                Math.max(0, rowsHeight - contentHeight)));
-    }
-
-    @Unique
-    private int recipeForest$panelWidth() {
-        return Math.max(1, Math.min(RECIPE_FOREST$PANEL_WIDTH, width - 8));
-    }
-
-    @Unique
-    private int recipeForest$panelHeight() {
-        return Math.max(1, Math.min(RECIPE_FOREST$PANEL_HEIGHT, height - 8));
-    }
-
-    @Unique
-    private int recipeForest$panelLeft() {
-        return (width - recipeForest$panelWidth()) / 2;
-    }
-
-    @Unique
-    private int recipeForest$panelTop() {
-        return (height - recipeForest$panelHeight()) / 2;
-    }
-
-    @Unique
-    private int recipeForest$valueLeft() {
-        return recipeForest$panelLeft() + Math.min(135, recipeForest$panelWidth() / 2);
-    }
-
-    @Unique
-    private int recipeForest$valueWidth() {
-        return Math.max(1,
-                recipeForest$panelLeft() + recipeForest$panelWidth() - 7 - recipeForest$valueLeft());
-    }
-
-    @Unique
-    private int recipeForest$keyResetWidth() {
-        return Math.max(1, Math.min(48, recipeForest$valueWidth() / 3));
-    }
-
-    @Unique
-    private int recipeForest$keyButtonWidth() {
-        return Math.max(1, recipeForest$valueWidth() - recipeForest$keyResetWidth() - 4);
-    }
-
-    @Unique
-    private int recipeForest$doneWidth() {
-        return Math.max(1, Math.min(150, recipeForest$panelWidth() - 12));
-    }
-
-    @Unique
-    private int recipeForest$doneLeft() {
-        return (width - recipeForest$doneWidth()) / 2;
     }
 
     @Unique
@@ -412,12 +217,117 @@ public abstract class ConfigScreenMixin extends Screen {
     @Unique
     private static Component recipeForest$enumLabel(String setting, Enum<?> value) {
         return Component.translatable("screen.emi_recipeforest.settings." + setting + "."
-                + value.name().toLowerCase(java.util.Locale.ROOT));
+                + value.name().toLowerCase(Locale.ROOT));
     }
 
     @Unique
-    private static boolean recipeForest$contains(int x, int y, int width, int height,
-            double mouseX, double mouseY) {
-        return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
+    private static final class RecipeForestKeyEntry extends ConfigEntryWidget {
+        private final BooleanSupplier capturing;
+        private final BooleanSupplier conflict;
+        private final Button keyButton;
+        private final Button resetButton;
+
+        private RecipeForestKeyEntry(Supplier<String> currentSearch, BooleanSupplier capturing,
+                BooleanSupplier conflict, Runnable beginCapture, Runnable reset) {
+            super(Component.translatable("screen.emi_recipeforest.settings.forest_key"), List.of(), currentSearch,
+                    RECIPE_FOREST$BUTTON_HEIGHT);
+            this.capturing = capturing;
+            this.conflict = conflict;
+            keyButton = Button.builder(Component.empty(), button -> beginCapture.run())
+                    .bounds(0, 0, 98, RECIPE_FOREST$BUTTON_HEIGHT).build();
+            resetButton = Button.builder(
+                    Component.translatable("screen.emi_recipeforest.settings.forest_key.reset"),
+                    button -> reset.run()).bounds(0, 0, 48, RECIPE_FOREST$BUTTON_HEIGHT).build();
+            setChildren(List.of(keyButton, resetButton));
+        }
+
+        @Override
+        public void update(int y, int x, int width, int height) {
+            int left = x + width - RECIPE_FOREST$CONTROL_WIDTH;
+            keyButton.setX(left);
+            keyButton.setY(y);
+            keyButton.setMessage(conflict.getAsBoolean()
+                    ? Component.translatable("screen.emi_recipeforest.settings.forest_key.conflict_r")
+                    : capturing.getAsBoolean()
+                            ? Component.translatable("screen.emi_recipeforest.settings.forest_key.capture")
+                            : InputConstants.Type.KEYSYM.getOrCreate(ForestBookmarks.getForestKeyCode())
+                                    .getDisplayName());
+            resetButton.setX(left + 102);
+            resetButton.setY(y);
+        }
+    }
+
+    @Unique
+    private static class RecipeForestValueEntry extends ConfigEntryWidget {
+        private final Supplier<Component> value;
+        private final Button button;
+
+        private RecipeForestValueEntry(Component name, Supplier<String> currentSearch,
+                Supplier<Component> value, Runnable onPress) {
+            super(name, List.of(), currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
+            this.value = value;
+            button = Button.builder(value.get(), ignored -> onPress.run())
+                    .bounds(0, 0, RECIPE_FOREST$CONTROL_WIDTH, RECIPE_FOREST$BUTTON_HEIGHT).build();
+            setChildren(List.of(button));
+        }
+
+        @Override
+        public void update(int y, int x, int width, int height) {
+            button.setX(x + width - button.getWidth());
+            button.setY(y);
+            button.setMessage(value.get());
+        }
+    }
+
+    @Unique
+    private static final class RecipeForestStepperEntry extends ConfigEntryWidget {
+        private final IntSupplier value;
+        private final IntConsumer setter;
+        private final int minimum;
+        private final int maximum;
+        private final BooleanSupplier visible;
+        private final Button decrease;
+        private final Button display;
+        private final Button increase;
+
+        private RecipeForestStepperEntry(Component name, Supplier<String> currentSearch, IntSupplier value,
+                IntConsumer setter, int minimum, int maximum, BooleanSupplier visible) {
+            super(name, List.of(), currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
+            this.value = value;
+            this.setter = setter;
+            this.minimum = minimum;
+            this.maximum = maximum;
+            this.visible = visible;
+            decrease = Button.builder(Component.translatable("screen.emi_recipeforest.settings.columns.decrease"),
+                    ignored -> setter.accept(value.getAsInt() - 1))
+                    .bounds(0, 0, 20, RECIPE_FOREST$BUTTON_HEIGHT).build();
+            display = Button.builder(Component.empty(), ignored -> {
+            }).bounds(0, 0, 106, RECIPE_FOREST$BUTTON_HEIGHT).build();
+            display.active = false;
+            increase = Button.builder(Component.translatable("screen.emi_recipeforest.settings.columns.increase"),
+                    ignored -> setter.accept(value.getAsInt() + 1))
+                    .bounds(0, 0, 20, RECIPE_FOREST$BUTTON_HEIGHT).build();
+            setChildren(List.of(decrease, display, increase));
+        }
+
+        @Override
+        public void update(int y, int x, int width, int height) {
+            int current = value.getAsInt();
+            int left = x + width - RECIPE_FOREST$CONTROL_WIDTH;
+            decrease.setX(left);
+            decrease.setY(y);
+            decrease.active = current > minimum;
+            display.setX(left + 22);
+            display.setY(y);
+            display.setMessage(Component.literal(Integer.toString(current)));
+            increase.setX(left + 130);
+            increase.setY(y);
+            increase.active = current < maximum;
+        }
+
+        @Override
+        public int getHeight() {
+            return visible.getAsBoolean() ? super.getHeight() : 0;
+        }
     }
 }

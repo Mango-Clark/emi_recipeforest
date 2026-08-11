@@ -43,7 +43,7 @@ sourceSets.main.resources.srcDir 'src/generated/resources'
 
 dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
-    compileOnly "dev.emi:emi-forge:${emi_version}"
+    modCompileOnly "dev.emi:emi-forge:${emi_version}"
     modRuntimeOnly "dev.emi:emi-forge:${emi_version}"
 }
 

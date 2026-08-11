@@ -2,14 +2,24 @@ package io.github.mango_clark.emirecipeforest.forest;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
+import com.google.gson.JsonElement;
+
+import dev.emi.emi.EmiPort;
+import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.recipe.EmiRecipe;
+import dev.emi.emi.api.recipe.EmiResolutionRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
+import dev.emi.emi.api.stack.serializer.EmiIngredientSerializer;
 import dev.emi.emi.bom.BoM;
+import dev.emi.emi.bom.FoldState;
 import dev.emi.emi.bom.MaterialNode;
 import dev.emi.emi.bom.MaterialTree;
+import io.github.mango_clark.emirecipeforest.Constants;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 
@@ -28,6 +38,7 @@ public final class ForestManager {
     private static boolean synchronizingGoal;
     private static PendingResolution pendingResolution;
     private static boolean applyingPendingResolution;
+    private static ReloadSnapshot reloadSnapshot;
 
     private ForestManager() {
     }
@@ -181,7 +192,66 @@ public final class ForestManager {
         return true;
     }
 
-    public static void clear() {
+    public static synchronized void clear() {
+        reloadSnapshot = null;
+        clearLiveState();
+    }
+
+    /** Captures reload-safe values before EMI invalidates its live recipe objects. */
+    public static synchronized void beginRecipeReload() {
+        if (reloadSnapshot == null && !TREES.isEmpty()) {
+            List<ReloadRoot> roots = new ArrayList<>();
+            for (int i = 0; i < TREES.size(); i++) {
+                ReloadRoot root = ReloadRoot.capture(TREES.get(i), i);
+                if (root != null) {
+                    roots.add(root);
+                }
+            }
+            if (!roots.isEmpty()) {
+                reloadSnapshot = new ReloadSnapshot(List.copyOf(roots), selectedIndex, craftingMode);
+            }
+        }
+        clearLiveState();
+    }
+
+    /** Rebuilds the live forest exclusively from EMI's newly loaded recipe objects. */
+    public static synchronized void finishRecipeReload() {
+        ReloadSnapshot snapshot = reloadSnapshot;
+        if (snapshot == null) {
+            return;
+        }
+        reloadSnapshot = null;
+        clearLiveState();
+
+        int restoredSelected = -1;
+        for (ReloadRoot root : snapshot.roots) {
+            EmiRecipe recipe = EmiApi.getRecipeManager().getRecipe(EmiPort.id(root.recipeId));
+            if (recipe == null || !recipe.supportsRecipeTree()) {
+                continue;
+            }
+            try {
+                MaterialTree tree = new MaterialTree(recipe);
+                tree.batches = root.batches;
+                root.restoreResolutions(tree);
+                root.restoreFolds(tree.goal);
+                if (root.originalIndex == snapshot.selectedIndex) {
+                    restoredSelected = TREES.size();
+                }
+                TREES.add(tree);
+            } catch (RuntimeException exception) {
+                Constants.LOG.warn("Skipping RecipeForest root '{}' after EMI reload", root.recipeId, exception);
+            }
+        }
+
+        if (!TREES.isEmpty()) {
+            selectedIndex = restoredSelected >= 0 ? restoredSelected
+                    : Math.min(snapshot.selectedIndex, TREES.size() - 1);
+            craftingMode = snapshot.craftingMode;
+        }
+        synchronizeSelectedTree();
+    }
+
+    private static void clearLiveState() {
         cancelPendingResolution();
         TREES.clear();
         selectedIndex = -1;
@@ -281,5 +351,118 @@ public final class ForestManager {
     }
 
     private record PendingResolution(EmiIngredient ingredient, MaterialTree source, ResolutionScope scope) {
+    }
+
+    private record ReloadSnapshot(List<ReloadRoot> roots, int selectedIndex, boolean craftingMode) {
+    }
+
+    private record ReloadRoot(String recipeId, long batches, int originalIndex,
+            List<ReloadResolution> resolutions, Map<String, FoldState> folds) {
+        private static ReloadRoot capture(MaterialTree tree, int originalIndex) {
+            if (tree == null || tree.goal == null || tree.goal.recipe == null || tree.goal.recipe.getId() == null) {
+                return null;
+            }
+            List<ReloadResolution> resolutions = new ArrayList<>();
+            for (Map.Entry<EmiIngredient, EmiRecipe> entry : tree.resolutions.entrySet()) {
+                ReloadResolution resolution = ReloadResolution.capture(entry.getKey(), entry.getValue());
+                if (resolution != null) {
+                    resolutions.add(resolution);
+                }
+            }
+            Map<String, FoldState> folds = new LinkedHashMap<>();
+            captureFolds(tree.goal, "", folds);
+            return new ReloadRoot(tree.goal.recipe.getId().toString(), Math.max(1, tree.batches), originalIndex,
+                    List.copyOf(resolutions), Map.copyOf(folds));
+        }
+
+        private void restoreResolutions(MaterialTree tree) {
+            for (ReloadResolution resolution : resolutions) {
+                try {
+                    resolution.restore(tree);
+                } catch (RuntimeException exception) {
+                    Constants.LOG.warn("Skipping RecipeForest resolution in root '{}' after EMI reload",
+                            recipeId, exception);
+                }
+            }
+        }
+
+        private void restoreFolds(MaterialNode root) {
+            folds.forEach((path, state) -> {
+                MaterialNode node = findNode(root, path);
+                if (node != null) {
+                    node.state = state;
+                }
+            });
+        }
+
+        private static void captureFolds(MaterialNode node, String path, Map<String, FoldState> folds) {
+            folds.put(path, node.state);
+            if (node.children != null) {
+                for (int i = 0; i < node.children.size(); i++) {
+                    captureFolds(node.children.get(i), path.isEmpty() ? Integer.toString(i) : path + '/' + i, folds);
+                }
+            }
+        }
+
+        private static MaterialNode findNode(MaterialNode node, String path) {
+            if (path.isEmpty()) {
+                return node;
+            }
+            for (String part : path.split("/")) {
+                if (node.children == null) {
+                    return null;
+                }
+                try {
+                    int index = Integer.parseInt(part);
+                    if (index < 0 || index >= node.children.size()) {
+                        return null;
+                    }
+                    node = node.children.get(index);
+                } catch (NumberFormatException exception) {
+                    return null;
+                }
+            }
+            return node;
+        }
+    }
+
+    private record ReloadResolution(JsonElement ingredient, String recipeId, JsonElement selectedStack) {
+        private static ReloadResolution capture(EmiIngredient ingredient, EmiRecipe recipe) {
+            JsonElement ingredientJson = EmiIngredientSerializer.getSerialized(ingredient);
+            if (ingredientJson == null) {
+                return null;
+            }
+            if (recipe == null) {
+                return new ReloadResolution(ingredientJson.deepCopy(), null, null);
+            }
+            if (recipe instanceof EmiResolutionRecipe resolution) {
+                JsonElement stackJson = EmiIngredientSerializer.getSerialized(resolution.stack);
+                return stackJson == null ? null
+                        : new ReloadResolution(ingredientJson.deepCopy(), null, stackJson.deepCopy());
+            }
+            return recipe.getId() == null ? null
+                    : new ReloadResolution(ingredientJson.deepCopy(), recipe.getId().toString(), null);
+        }
+
+        private void restore(MaterialTree tree) {
+            EmiIngredient key = EmiIngredientSerializer.getDeserialized(ingredient.deepCopy());
+            if (key.isEmpty()) {
+                return;
+            }
+            EmiRecipe recipe = null;
+            if (selectedStack != null) {
+                EmiIngredient stack = EmiIngredientSerializer.getDeserialized(selectedStack.deepCopy());
+                if (stack.isEmpty() || stack.getEmiStacks().size() != 1) {
+                    return;
+                }
+                recipe = new EmiResolutionRecipe(key, stack.getEmiStacks().get(0));
+            } else if (recipeId != null) {
+                recipe = EmiApi.getRecipeManager().getRecipe(EmiPort.id(recipeId));
+                if (recipe == null) {
+                    return;
+                }
+            }
+            tree.addResolution(key, recipe);
+        }
     }
 }

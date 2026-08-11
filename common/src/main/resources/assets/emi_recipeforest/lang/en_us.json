@@ -17,6 +17,7 @@
   "screen.emi_recipeforest.settings.quantity_mode.text": "Text",
   "screen.emi_recipeforest.settings.forest_key": "Forest key",
   "screen.emi_recipeforest.settings.forest_key.capture": "Press a key...",
+  "screen.emi_recipeforest.settings.forest_key.conflict_r": "R is reserved by EMI",
   "screen.emi_recipeforest.settings.forest_key.reset": "Reset",
   "screen.emi_recipeforest.settings.box_enabled": "Box grouping",
   "screen.emi_recipeforest.settings.stacks_per_box": "Stacks per box: %s",
