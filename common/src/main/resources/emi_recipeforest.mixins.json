@@ -8,13 +8,17 @@
   "mixins": [],
   "client": [
     "BoMMixin",
+    "ConfigScreenMixin",
+    "EmiApiMixin",
     "RecipeTreeButtonWidgetMixin",
     "EmiReloadManagerMixin",
     "EmiFavoritesMixin",
     "EmiSidebarsMixin",
     "EmiSearchWidgetMixin",
     "EmiScreenManagerMixin",
-    "EmiPersistentDataMixin"
+    "EmiPersistentDataMixin",
+    "MaterialTreeMixin",
+    "RecipeScreenMixin"
   ],
   "server": [],
   "injectors": {

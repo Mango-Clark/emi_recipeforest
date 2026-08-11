@@ -37,6 +37,9 @@ def emiCompatibilityContracts = [
                 [token: ' craftingMode;', descriptor: 'Z', access: 'public static'],
                 [token: ' setGoal(', descriptor: '(Ldev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public static']
         ],
+        'dev.emi.emi.bom.MaterialTree': [
+                [token: ' addResolution(', descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public']
+        ],
         'dev.emi.emi.widget.RecipeTreeButtonWidget': [
                 [token: 'RecipeTreeButtonWidget(', descriptor: '(IILdev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public'],
                 [token: ' mouseClicked(', descriptor: '(III)Z', access: 'public'],
@@ -55,13 +58,50 @@ def emiCompatibilityContracts = [
         'dev.emi.emi.screen.widget.EmiSearchWidget': [
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public']
         ],
+        'dev.emi.emi.screen.ConfigScreen': [
+                [token: ' init(', descriptor: '()V', access: 'protected'],
+                [token: ' render(', descriptor: '(Lnet/minecraft/client/gui/GuiGraphics;IIF)V', access: 'public'],
+                [token: ' mouseClicked(', descriptor: '(DDI)Z', access: 'public'],
+                [token: ' keyPressed(', descriptor: '(III)Z', access: 'public'],
+                [token: ' keyReleased(', descriptor: '(III)Z', access: 'public']
+        ],
+        'dev.emi.emi.screen.RecipeScreen': [
+                [token: 'RecipeScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;Ljava/util/Map;)V', access: 'public'],
+                [token: ' onClose(', descriptor: '()V', access: 'public'],
+                [token: ' resolve;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static']
+        ],
+        'dev.emi.emi.api.EmiApi': [
+                [token: ' viewRecipeTree(', descriptor: '()V', access: 'public static'],
+                [token: ' getHandledScreen(', descriptor: '()Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;', access: 'public static']
+        ],
+        'dev.emi.emi.screen.BoMScreen': [
+                [token: 'BoMScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;)V', access: 'public'],
+                [token: ' old;', descriptor: 'Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;', access: 'public']
+        ],
+        'dev.emi.emi.screen.widget.SizedButtonWidget': [
+                [token: 'SizedButtonWidget(', descriptor: '(IIIIIILjava/util/function/BooleanSupplier;Lnet/minecraft/client/gui/components/Button$OnPress;Ljava/util/List;)V', access: 'public']
+        ],
         'dev.emi.emi.screen.EmiScreenManager': [
+                [token: ' keyPressed(', descriptor: '(III)Z', access: 'public static'],
                 [token: ' mouseReleased(', descriptor: '(DDI)Z', access: 'public static'],
                 [token: ' mouseDragged(', descriptor: '(DDIDD)Z', access: 'public static'],
                 [token: ' repopulatePanels(', descriptor: '(Ldev/emi/emi/config/SidebarType;)V', access: 'public static'],
+                [token: ' getHoveredStack(', descriptor: '(IIZ)Ldev/emi/emi/api/stack/EmiStackInteraction;', access: 'public static'],
                 [token: ' pressedStack;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static'],
                 [token: ' draggedStack;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static'],
-                [token: ' search;', descriptor: 'Ldev/emi/emi/screen/widget/EmiSearchWidget;', access: 'public static']
+                [token: ' search;', descriptor: 'Ldev/emi/emi/screen/widget/EmiSearchWidget;', access: 'public static'],
+                [token: ' tree;', descriptor: 'Ldev/emi/emi/screen/widget/SizedButtonWidget;', access: 'public static'],
+                [token: ' lastPlayerInventory;', descriptor: 'Ldev/emi/emi/api/recipe/EmiPlayerInventory;', access: 'public static'],
+                [token: ' lastMouseX;', descriptor: 'I', access: 'public static'],
+                [token: ' lastMouseY;', descriptor: 'I', access: 'public static']
+        ],
+        'dev.emi.emi.input.EmiInput': [
+                [token: ' getCurrentModifiers(', descriptor: '()I', access: 'public static']
+        ],
+        'dev.emi.emi.api.stack.EmiStackInteraction': [
+                [token: ' isEmpty(', descriptor: '()Z', access: 'public'],
+                [token: ' getRecipeContext(', descriptor: '()Ldev/emi/emi/api/recipe/EmiRecipe;', access: 'public'],
+                [token: ' getStack(', descriptor: '()Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public']
         ],
         'dev.emi.emi.runtime.EmiPersistentData': [
                 [token: ' load(', descriptor: '()V', access: 'public static']
@@ -136,6 +176,34 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                                 + " ${member.token.trim()} descriptor ${member.descriptor}")
                     }
                 }
+            }
+            def emiApiBytecode = new ByteArrayOutputStream()
+            def emiApiResult = project.exec {
+                commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-c', '-s',
+                        'dev.emi.emi.api.EmiApi'
+                standardOutput = emiApiBytecode
+                errorOutput = emiApiBytecode
+                ignoreExitValue = true
+            }
+            if (emiApiResult.exitValue != 0) {
+                throw new GradleException("EMI ${version}: unable to inspect EmiApi bytecode: "
+                        + emiApiBytecode.toString('UTF-8'))
+            }
+            def apiLines = emiApiBytecode.toString('UTF-8').readLines()
+            def viewTreeStart = apiLines.findIndexOf { it.trim() == 'public static void viewRecipeTree();' }
+            def viewTreeEnd = viewTreeStart < 0 ? -1 : ((viewTreeStart + 1)..<apiLines.size()).find {
+                def line = apiLines[it]
+                line.startsWith('  ') && !line.startsWith('    ') && line.trim().endsWith(';')
+            }
+            if (viewTreeEnd == null || viewTreeEnd < 0) {
+                viewTreeEnd = apiLines.size()
+            }
+            def newBoMScreenCount = viewTreeStart < 0 ? 0 : apiLines.subList(viewTreeStart, viewTreeEnd).count {
+                it.contains('new') && it.contains('// class dev/emi/emi/screen/BoMScreen')
+            }
+            if (newBoMScreenCount != 2) {
+                throw new GradleException("EMI ${version}: EmiApi.viewRecipeTree()V expected exactly two NEW "
+                        + "dev/emi/emi/screen/BoMScreen sites, found ${newBoMScreenCount}")
             }
             logger.lifecycle("Verified EMI ${version}")
         }

@@ -127,7 +127,22 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 public final class JsonObject extends JsonElement { private final java.util.Map<String,JsonElement> values=new java.util.LinkedHashMap<>(); public void add(String key,JsonElement value){values.put(key,value);} public void addProperty(String key,String value){add(key,new JsonPrimitive(value));} public void addProperty(String key,Number value){add(key,new JsonPrimitive(value));} public void addProperty(String key,Boolean value){add(key,new JsonPrimitive(value));} public boolean has(String key){return values.containsKey(key);} public JsonElement get(String key){return values.get(key);} public JsonObject getAsJsonObject(String key){return (JsonObject)get(key);} public JsonArray getAsJsonArray(String key){return (JsonArray)get(key);} public java.util.Set<String> keySet(){return values.keySet();} }
                 """),
             Map.entry("com.google.gson.Gson", """
-                package com.google.gson; public class Gson { public <T>T fromJson(String value,Class<T> type){throw new UnsupportedOperationException();} public String toJson(Object value){return String.valueOf(value);} }
+                package com.google.gson;
+                public class Gson {
+                    private static final java.util.Map<String,Object> VALUES = new java.util.HashMap<>();
+                    private static int nextId;
+                    public <T>T fromJson(String value,Class<T> type){
+                        Object result=VALUES.get(value);
+                        if(result==null||!type.isInstance(result))throw new IllegalArgumentException("Malformed JSON");
+                        return type.cast(result);
+                    }
+                    public String toJson(Object value){
+                        String id="json:"+(++nextId);
+                        VALUES.put(id,value);
+                        return id;
+                    }
+                    public String toJson(JsonElement value){return toJson((Object)value);}
+                }
                 """),
             Map.entry("com.google.gson.GsonBuilder", """
                 package com.google.gson; public class GsonBuilder { public GsonBuilder setPrettyPrinting(){return this;} public Gson create(){return new Gson();} }
@@ -203,8 +218,11 @@ final class IsolatedEmiRuntime implements AutoCloseable {
             Map.entry("dev.emi.emi.screen.EmiScreenManager", """
                 package dev.emi.emi.screen; public final class EmiScreenManager { public static final Search search=new Search(); public static final class Search { public void setValue(String value){} } }
                 """),
+            Map.entry("org.slf4j.Logger", """
+                package org.slf4j; public interface Logger { default void warn(String message,Object arg){} default void warn(String message,Throwable error){} default void error(String message,Object first,Object second){} }
+                """),
             Map.entry("io.github.mango_clark.emirecipeforest.Constants", """
-                package io.github.mango_clark.emirecipeforest; public final class Constants { public static final Log LOG=new Log(); public static final class Log { public void warn(String message,Object... args){} public void error(String message,Object... args){} } }
+                package io.github.mango_clark.emirecipeforest; public final class Constants { public static final org.slf4j.Logger LOG=new org.slf4j.Logger(){}; }
                 """)
         );
     }

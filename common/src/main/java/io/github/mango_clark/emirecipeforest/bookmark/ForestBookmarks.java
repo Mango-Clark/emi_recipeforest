@@ -41,11 +41,35 @@ import net.minecraft.world.item.Items;
 /** Addon-owned search and forest bookmarks, independent of EMI's emi.json. */
 public final class ForestBookmarks {
     private static final int SCHEMA_VERSION = 1;
+    /** GLFW key code for F, stored as an integer to remain independent of localized key names. */
+    public static final int DEFAULT_FOREST_KEY_CODE = 70;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final List<SearchBookmark> SEARCHES = new ArrayList<>();
     private static final List<TreeBookmark> TREES = new ArrayList<>();
     private static int rootGridColumns = 8;
     private static int rootGridRows = 2;
+    private static ResolutionScope resolutionScope = ResolutionScope.ALL_ROOTS;
+    private static RootLayout rootLayout = RootLayout.LIST;
+    private static QuantityMode quantityMode = QuantityMode.ICON;
+    private static int forestKeyCode = DEFAULT_FOREST_KEY_CODE;
+    private static boolean boxEnabled = true;
+    private static int stacksPerBox = 27;
+
+    public enum ResolutionScope {
+        ALL_ROOTS,
+        MATCHING_ROOTS,
+        SELECTED_ROOT
+    }
+
+    public enum RootLayout {
+        LIST,
+        GRID
+    }
+
+    public enum QuantityMode {
+        ICON,
+        TEXT
+    }
 
     private ForestBookmarks() {
     }
@@ -76,6 +100,60 @@ public final class ForestBookmarks {
     public static void setRootGridSize(int columns, int rows) {
         rootGridColumns = clamp(columns, 1, 16);
         rootGridRows = clamp(rows, 1, 8);
+        save();
+    }
+
+    public static ResolutionScope getResolutionScope() {
+        return resolutionScope;
+    }
+
+    public static void setResolutionScope(ResolutionScope scope) {
+        resolutionScope = Objects.requireNonNull(scope, "scope");
+        save();
+    }
+
+    public static RootLayout getRootLayout() {
+        return rootLayout;
+    }
+
+    public static void setRootLayout(RootLayout layout) {
+        rootLayout = Objects.requireNonNull(layout, "layout");
+        save();
+    }
+
+    public static QuantityMode getQuantityMode() {
+        return quantityMode;
+    }
+
+    public static void setQuantityMode(QuantityMode mode) {
+        quantityMode = Objects.requireNonNull(mode, "mode");
+        save();
+    }
+
+    public static int getForestKeyCode() {
+        return forestKeyCode;
+    }
+
+    public static void setForestKeyCode(int keyCode) {
+        forestKeyCode = keyCode;
+        save();
+    }
+
+    public static boolean isBoxEnabled() {
+        return boxEnabled;
+    }
+
+    public static void setBoxEnabled(boolean enabled) {
+        boxEnabled = enabled;
+        save();
+    }
+
+    public static int getStacksPerBox() {
+        return stacksPerBox;
+    }
+
+    public static void setStacksPerBox(int stacks) {
+        stacksPerBox = clamp(stacks, 1, 256);
         save();
     }
 
@@ -140,6 +218,12 @@ public final class ForestBookmarks {
         TREES.clear();
         rootGridColumns = 8;
         rootGridRows = 2;
+        resolutionScope = ResolutionScope.ALL_ROOTS;
+        rootLayout = RootLayout.LIST;
+        quantityMode = QuantityMode.ICON;
+        forestKeyCode = DEFAULT_FOREST_KEY_CODE;
+        boxEnabled = true;
+        stacksPerBox = 27;
         Path path = path();
         if (!Files.isRegularFile(path)) {
             return;
@@ -154,6 +238,13 @@ public final class ForestBookmarks {
                 JsonObject settings = root.getAsJsonObject("settings");
                 rootGridColumns = clamp(intValue(settings, "rootGridColumns", 8), 1, 16);
                 rootGridRows = clamp(intValue(settings, "rootGridRows", 2), 1, 8);
+                resolutionScope = enumValue(settings, "resolutionScope", ResolutionScope.class,
+                        ResolutionScope.ALL_ROOTS);
+                rootLayout = enumValue(settings, "rootLayout", RootLayout.class, RootLayout.LIST);
+                quantityMode = enumValue(settings, "quantityMode", QuantityMode.class, QuantityMode.ICON);
+                forestKeyCode = intValue(settings, "forestKeyCode", DEFAULT_FOREST_KEY_CODE);
+                boxEnabled = booleanValue(settings, "boxEnabled", true);
+                stacksPerBox = clamp(intValue(settings, "stacksPerBox", 27), 1, 256);
             }
             JsonArray searches = array(root, "searches");
             for (JsonElement element : searches) {
@@ -191,6 +282,12 @@ public final class ForestBookmarks {
         JsonObject settings = new JsonObject();
         settings.addProperty("rootGridColumns", rootGridColumns);
         settings.addProperty("rootGridRows", rootGridRows);
+        settings.addProperty("resolutionScope", resolutionScope.name());
+        settings.addProperty("rootLayout", rootLayout.name());
+        settings.addProperty("quantityMode", quantityMode.name());
+        settings.addProperty("forestKeyCode", forestKeyCode);
+        settings.addProperty("boxEnabled", boxEnabled);
+        settings.addProperty("stacksPerBox", stacksPerBox);
         root.add("settings", settings);
         JsonArray searches = new JsonArray();
         for (SearchBookmark bookmark : SEARCHES) {
@@ -238,6 +335,33 @@ public final class ForestBookmarks {
     private static int intValue(JsonObject object, String key, int fallback) {
         try {
             return object.has(key) ? object.get(key).getAsInt() : fallback;
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
+    }
+
+    private static boolean booleanValue(JsonObject object, String key, boolean fallback) {
+        try {
+            JsonElement element = object.get(key);
+            if (element == null || !element.isJsonPrimitive()) {
+                return fallback;
+            }
+            String value = element.getAsString();
+            if ("true".equalsIgnoreCase(value)) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(value)) {
+                return false;
+            }
+            return fallback;
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
+    }
+
+    private static <T extends Enum<T>> T enumValue(JsonObject object, String key, Class<T> type, T fallback) {
+        try {
+            return object.has(key) ? Enum.valueOf(type, object.get(key).getAsString()) : fallback;
         } catch (RuntimeException exception) {
             return fallback;
         }

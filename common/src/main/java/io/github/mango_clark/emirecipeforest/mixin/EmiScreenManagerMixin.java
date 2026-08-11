@@ -1,25 +1,79 @@
 package io.github.mango_clark.emirecipeforest.mixin;
 
+import java.util.List;
+
+import dev.emi.emi.EmiUtil;
+import dev.emi.emi.api.EmiApi;
+import dev.emi.emi.api.recipe.EmiPlayerInventory;
+import dev.emi.emi.api.recipe.EmiRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
 import dev.emi.emi.api.stack.EmiStack;
+import dev.emi.emi.api.stack.EmiStackInteraction;
 import dev.emi.emi.config.SidebarType;
 import dev.emi.emi.input.EmiInput;
 import dev.emi.emi.screen.EmiScreenManager;
+import dev.emi.emi.screen.widget.SizedButtonWidget;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.SearchBookmark;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.TreeBookmark;
+import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import io.github.mango_clark.emirecipeforest.screen.BookmarkNameScreen;
 import io.github.mango_clark.emirecipeforest.screen.ForestScreen;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.ContainerEventHandler;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = EmiScreenManager.class, remap = false)
 public abstract class EmiScreenManagerMixin {
+    @Shadow
+    private static EmiPlayerInventory lastPlayerInventory;
+
+    @Inject(method = "<clinit>", at = @At("TAIL"))
+    private static void recipeForest$replaceTreeButtonCallback(CallbackInfo ci) {
+        EmiScreenManager.tree = new SizedButtonWidget(0, 0, 20, 20, 184, 0, () -> true, button -> {
+            if (ForestManager.isEmpty()) {
+                EmiApi.viewRecipeTree();
+            } else {
+                ForestScreen.open();
+            }
+        }, List.of(Component.translatable("tooltip.emi.recipe_tree")));
+    }
+
+    @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
+    private static void recipeForest$addHoveredRecipeToForest(int keyCode, int scanCode, int modifiers,
+            CallbackInfoReturnable<Boolean> cir) {
+        if (keyCode != ForestBookmarks.getForestKeyCode() || EmiInput.getCurrentModifiers() != 0
+                || EmiApi.getHandledScreen() == null || recipeForest$hasFocusedTextField()) {
+            return;
+        }
+
+        EmiStackInteraction hovered = EmiScreenManager.getHoveredStack(
+                EmiScreenManager.lastMouseX, EmiScreenManager.lastMouseY, true);
+        if (hovered == null || hovered.isEmpty()) {
+            return;
+        }
+        EmiRecipe recipe = hovered.getRecipeContext();
+        if (recipe == null && lastPlayerInventory != null) {
+            recipe = EmiUtil.getPreferredRecipe(hovered.getStack(), lastPlayerInventory, false);
+        }
+        if (recipe == null || !recipe.supportsRecipeTree()) {
+            return;
+        }
+
+        ForestManager.add(recipe);
+        ForestScreen.open();
+        cir.setReturnValue(true);
+    }
+
     @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)
     private static void recipeForest$handleBookmarkCard(double mouseX, double mouseY, int button,
             CallbackInfoReturnable<Boolean> cir) {
@@ -69,6 +123,32 @@ public abstract class EmiScreenManagerMixin {
     @Unique
     private static boolean recipeForest$isBookmarkCard(EmiIngredient ingredient) {
         return ingredient instanceof SearchBookmark || ingredient instanceof TreeBookmark;
+    }
+
+    @Unique
+    private static boolean recipeForest$hasFocusedTextField() {
+        if (EmiScreenManager.search != null && EmiScreenManager.search.canConsumeInput()) {
+            return true;
+        }
+        return Minecraft.getInstance().screen instanceof ContainerEventHandler handler
+                && recipeForest$hasFocusedTextField(handler, 10);
+    }
+
+    @Unique
+    private static boolean recipeForest$hasFocusedTextField(ContainerEventHandler parent, int depthRemaining) {
+        if (depthRemaining <= 0) {
+            return false;
+        }
+        for (GuiEventListener child : parent.children()) {
+            if (child instanceof EditBox field && field.visible && field.canConsumeInput()) {
+                return true;
+            }
+            if (child instanceof ContainerEventHandler nested
+                    && recipeForest$hasFocusedTextField(nested, depthRemaining - 1)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Unique
