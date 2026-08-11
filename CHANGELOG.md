@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Left-clicking Recipe Tree now adds the recipe to the Forest; Shift-clicking replaces the Forest and opens a Solo tree.
 - Recipe Forest uses EMI's native Recipe Tree button visuals, and the global Recipe Tree button opens the active Forest first.
-- Recipe Forest layout, resolution, quantity, box-grouping, and shortcut settings appear inline in EMI's settings list between Cheats and Developer.
+- Recipe Forest settings now use EMI's native config index, row tooltips, numeric and binding controls, and reset confirmation between Cheats and Developer; resolution scope opens EMI's separate option picker.
+- Forest shortcuts now support up to four key, scan-code, or mouse bindings stored only in RecipeForest's versioned settings. Existing single-key settings migrate automatically, conflicts show an RF override indicator without changing EMI's config, and the original EMI shortcut still runs when no recipe can be added.
 - Alt quantity columns expand only while Alt is held; quantity and Recipe Forest icons share a unified atlas, and grid batches use compact, cell-fitting digits.
 - EMI compatibility is limited to versions 1.1.13 through 1.1.24 for Minecraft 1.20.1 and validated before mixins apply.
 

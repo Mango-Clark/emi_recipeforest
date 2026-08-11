@@ -70,10 +70,20 @@ def emiCompatibilityContracts = [
         ],
         'dev.emi.emi.screen.ConfigScreen': [
                 [token: ' list;', descriptor: 'Ldev/emi/emi/screen/widget/config/ListWidget;', access: 'public'],
+                [token: ' activeBind;', descriptor: 'Ldev/emi/emi/input/EmiBind;', access: 'public'],
                 [token: ' search;', descriptor: 'Ldev/emi/emi/screen/widget/config/ConfigSearch;', access: 'private'],
                 [token: ' init(', descriptor: '()V', access: 'protected'],
+                [token: ' addJumpButtons(', descriptor: '()V', access: 'private'],
+                [token: ' jump(', descriptor: '(Ljava/lang/String;)V', access: 'public'],
+                [token: ' mouseClicked(', descriptor: '(DDI)Z', access: 'public'],
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public'],
                 [token: ' keyReleased(', descriptor: '(III)Z', access: 'public']
+        ],
+        'dev.emi.emi.screen.ConfigEnumScreen': [
+                [token: 'ConfigEnumScreen(', descriptor: '(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Consumer;)V', access: 'public']
+        ],
+        'dev.emi.emi.screen.ConfigEnumScreen$Entry': [
+                [token: 'ConfigEnumScreen$Entry(', descriptor: '(Ljava/lang/Object;Lnet/minecraft/network/chat/Component;Ljava/util/List;)V', access: 'public']
         ],
         'dev.emi.emi.screen.widget.config.ListWidget': [
                 [token: ' children(', descriptor: '()Ljava/util/List;', access: 'public'],
@@ -89,10 +99,24 @@ def emiCompatibilityContracts = [
                 [token: 'ConfigEntryWidget(', descriptor: '(Lnet/minecraft/network/chat/Component;Ljava/util/List;Ljava/util/function/Supplier;I)V', access: 'public'],
                 [token: ' setChildren(', descriptor: '(Ljava/util/List;)V', access: 'public'],
                 [token: ' update(', descriptor: '(IIII)V', access: 'public'],
+                [token: ' render(', descriptor: '(Lnet/minecraft/client/gui/GuiGraphics;IIIIIIIZF)V', access: 'public'],
+                [token: ' getTooltip(', descriptor: '(II)Ljava/util/List;', access: 'public'],
                 [token: ' parentGroups;', descriptor: 'Ljava/util/List;', access: 'public']
         ],
         'dev.emi.emi.screen.widget.config.ConfigSearch': [
                 [token: ' getSearch(', descriptor: '()Ljava/lang/String;', access: 'public']
+        ],
+        'dev.emi.emi.screen.widget.config.ConfigJumpButton': [],
+        'dev.emi.emi.screen.widget.config.EmiBindWidget': [
+                [token: 'EmiBindWidget(', descriptor: '(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Supplier;Ldev/emi/emi/input/EmiBind;)V', access: 'public'],
+                [token: ' update(', descriptor: '(IIII)V', access: 'public']
+        ],
+        'dev.emi.emi.screen.widget.config.IntEdit': [
+                [token: 'IntEdit(', descriptor: '(ILjava/util/function/IntSupplier;Ljava/util/function/IntConsumer;)V', access: 'public'],
+                [token: ' text;', descriptor: 'Lnet/minecraft/client/gui/components/EditBox;', access: 'public final'],
+                [token: ' up;', descriptor: 'Lnet/minecraft/client/gui/components/Button;', access: 'public final'],
+                [token: ' down;', descriptor: 'Lnet/minecraft/client/gui/components/Button;', access: 'public final'],
+                [token: ' setPosition(', descriptor: '(II)V', access: 'public']
         ],
         'dev.emi.emi.screen.RecipeScreen': [
                 [token: 'RecipeScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;Ljava/util/Map;)V', access: 'public'],
@@ -130,6 +154,9 @@ def emiCompatibilityContracts = [
         'dev.emi.emi.EmiUtil': [
                 [token: ' getPreferredRecipe(', descriptor: '(Ljava/util/List;Ldev/emi/emi/api/recipe/EmiPlayerInventory;Z)Ldev/emi/emi/api/recipe/EmiRecipe;', access: 'public static']
         ],
+        'dev.emi.emi.EmiRenderHelper': [
+                [token: ' drawTooltip(', descriptor: '(Lnet/minecraft/client/gui/screens/Screen;Ldev/emi/emi/runtime/EmiDrawContext;Ljava/util/List;II)V', access: 'public static']
+        ],
         'dev.emi.emi.screen.BoMScreen': [
                 [token: 'BoMScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;)V', access: 'public'],
                 [token: ' old;', descriptor: 'Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;', access: 'public']
@@ -139,6 +166,7 @@ def emiCompatibilityContracts = [
         ],
         'dev.emi.emi.screen.EmiScreenManager': [
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public static'],
+                [token: ' mouseClicked(', descriptor: '(DDI)Z', access: 'public static'],
                 [token: ' mouseReleased(', descriptor: '(DDI)Z', access: 'public static'],
                 [token: ' mouseDragged(', descriptor: '(DDIDD)Z', access: 'public static'],
                 [token: ' repopulatePanels(', descriptor: '(Ldev/emi/emi/config/SidebarType;)V', access: 'public static'],
@@ -150,6 +178,26 @@ def emiCompatibilityContracts = [
                 [token: ' lastPlayerInventory;', descriptor: 'Ldev/emi/emi/api/recipe/EmiPlayerInventory;', access: 'public static'],
                 [token: ' lastMouseX;', descriptor: 'I', access: 'public static'],
                 [token: ' lastMouseY;', descriptor: 'I', access: 'public static']
+        ],
+        'dev.emi.emi.config.EmiConfig$ConfigValue': [
+                [token: ' value(', descriptor: '()Ljava/lang/String;', access: 'public abstract']
+        ],
+        'dev.emi.emi.input.EmiBind': [
+                [token: 'EmiBind(', descriptor: '(Ljava/lang/String;[Ldev/emi/emi/input/EmiBind$ModifiedKey;)V', access: 'public'],
+                [token: ' translationKey;', descriptor: 'Ljava/lang/String;', access: 'public final'],
+                [token: ' boundKeys;', descriptor: 'Ljava/util/List;', access: 'public'],
+                [token: ' setBind(', descriptor: '(ILdev/emi/emi/input/EmiBind$ModifiedKey;)V', access: 'public'],
+                [token: ' setBinds(', descriptor: '([Ldev/emi/emi/input/EmiBind$ModifiedKey;)V', access: 'public'],
+                [token: ' setToDefault(', descriptor: '()V', access: 'public'],
+                [token: ' matchesKey(', descriptor: '(II)Z', access: 'public'],
+                [token: ' matchesMouse(', descriptor: '(I)Z', access: 'public']
+        ],
+        'dev.emi.emi.input.EmiBind$ModifiedKey': [
+                [token: 'EmiBind$ModifiedKey(', descriptor: '(Lcom/mojang/blaze3d/platform/InputConstants$Key;I)V', access: 'public'],
+                [token: ' key(', descriptor: '()Lcom/mojang/blaze3d/platform/InputConstants$Key;', access: 'public'],
+                [token: ' modifiers(', descriptor: '()I', access: 'public'],
+                [token: ' modifiersToMatch(', descriptor: '()I', access: 'public'],
+                [token: ' isUnbound(', descriptor: '()Z', access: 'public']
         ],
         'dev.emi.emi.input.EmiInput': [
                 [token: ' getCurrentModifiers(', descriptor: '()I', access: 'public static'],
@@ -218,6 +266,21 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                     throw new GradleException("EMI ${version}: missing class ${owner}: ${output.toString('UTF-8')}")
                 }
                 def lines = output.toString('UTF-8').readLines()
+                if (owner in ['dev.emi.emi.input.EmiBind',
+                        'dev.emi.emi.screen.widget.config.EmiBindWidget']) {
+                    def declaration = lines.find { it.startsWith('public ') && it.contains(" ${owner} ") }
+                    if (declaration == null || declaration.contains(' final class ')
+                            || declaration.contains(' interface ')) {
+                        throw new GradleException("EMI ${version}: ${owner} must remain a non-final class")
+                    }
+                }
+                if (owner == 'dev.emi.emi.screen.widget.config.ConfigJumpButton') {
+                    def declaration = lines.find { it.startsWith('public ') && it.contains(" ${owner} ") }
+                    if (declaration == null
+                            || !declaration.contains(' extends dev.emi.emi.screen.widget.SizedButtonWidget ')) {
+                        throw new GradleException("EMI ${version}: ${owner} must extend SizedButtonWidget")
+                    }
+                }
                 members.each { member ->
                     def found = (0..<lines.size()).any { index ->
                         def signature = lines[index].trim()
@@ -261,6 +324,34 @@ tasks.register('verifyEmiCompatibilityMatrix') {
             if (newBoMScreenCount != 2) {
                 throw new GradleException("EMI ${version}: EmiApi.viewRecipeTree()V expected exactly two NEW "
                         + "dev/emi/emi/screen/BoMScreen sites, found ${newBoMScreenCount}")
+            }
+            def configBytecode = new ByteArrayOutputStream()
+            def configResult = project.exec {
+                commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-c', '-s',
+                        'dev.emi.emi.screen.ConfigScreen'
+                standardOutput = configBytecode
+                errorOutput = configBytecode
+                ignoreExitValue = true
+            }
+            if (configResult.exitValue != 0) {
+                throw new GradleException("EMI ${version}: unable to inspect ConfigScreen bytecode: "
+                        + configBytecode.toString('UTF-8'))
+            }
+            def configLines = configBytecode.toString('UTF-8').readLines()
+            def jumpStart = configLines.findIndexOf { it.trim() == 'private void addJumpButtons();' }
+            def jumpEnd = jumpStart < 0 ? -1 : ((jumpStart + 1)..<configLines.size()).find {
+                def line = configLines[it]
+                line.startsWith('  ') && !line.startsWith('    ') && line.trim().endsWith(';')
+            }
+            if (jumpEnd == null || jumpEnd < 0) {
+                jumpEnd = configLines.size()
+            }
+            def newJumpButtonCount = jumpStart < 0 ? 0 : configLines.subList(jumpStart, jumpEnd).count {
+                it.contains('new') && it.contains('// class dev/emi/emi/screen/widget/config/ConfigJumpButton')
+            }
+            if (newJumpButtonCount != 1) {
+                throw new GradleException("EMI ${version}: ConfigScreen.addJumpButtons()V expected exactly one NEW "
+                        + "ConfigJumpButton site, found ${newJumpButtonCount}")
             }
             logger.lifecycle("Verified EMI ${version}")
         }

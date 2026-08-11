@@ -40,8 +40,11 @@ import net.minecraft.world.item.Items;
 
 /** Addon-owned search and forest bookmarks, independent of EMI's emi.json. */
 public final class ForestBookmarks {
-    private static final int SCHEMA_VERSION = 1;
-    /** GLFW key code for F, stored as an integer to remain independent of localized key names. */
+    private static final int SCHEMA_VERSION = 2;
+    private static final int LEGACY_SCHEMA_VERSION = 1;
+    public static final int MAX_FOREST_BINDINGS = 4;
+    public static final int SHIFT_MODIFIER = 4;
+    /** GLFW key code for F, retained for migration and source compatibility. */
     public static final int DEFAULT_FOREST_KEY_CODE = 70;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final List<SearchBookmark> SEARCHES = new ArrayList<>();
@@ -51,7 +54,7 @@ public final class ForestBookmarks {
     private static ResolutionScope resolutionScope = ResolutionScope.ALL_ROOTS;
     private static RootLayout rootLayout = RootLayout.LIST;
     private static QuantityMode quantityMode = QuantityMode.ICON;
-    private static int forestKeyCode = DEFAULT_FOREST_KEY_CODE;
+    private static List<ForestBinding> forestBindings = defaultForestBindings();
     private static boolean boxEnabled = true;
     private static int stacksPerBox = 27;
 
@@ -69,6 +72,23 @@ public final class ForestBookmarks {
     public enum QuantityMode {
         ICON,
         TEXT
+    }
+
+    public enum BindingType {
+        KEYSYM,
+        SCANCODE,
+        MOUSE
+    }
+
+    /** Loader-neutral representation accepted by EMI's ModifiedKey adapter. */
+    public record ForestBinding(BindingType type, String name, int value, int modifiers) {
+        public ForestBinding {
+            Objects.requireNonNull(type, "type");
+            name = normalize(name);
+            if (name.isEmpty() || value < 0 || (modifiers & ~7) != 0) {
+                throw new IllegalArgumentException("Invalid RecipeForest binding");
+            }
+        }
     }
 
     private ForestBookmarks() {
@@ -130,12 +150,38 @@ public final class ForestBookmarks {
         save();
     }
 
-    public static int getForestKeyCode() {
-        return forestKeyCode;
+    public static List<ForestBinding> getForestBindings() {
+        return List.copyOf(forestBindings);
     }
 
+    public static void setForestBindings(List<ForestBinding> bindings) {
+        Objects.requireNonNull(bindings, "bindings");
+        List<ForestBinding> validated = new ArrayList<>(Math.min(bindings.size(), MAX_FOREST_BINDINGS));
+        for (ForestBinding binding : bindings) {
+            if (binding != null && validated.size() < MAX_FOREST_BINDINGS && !validated.contains(binding)) {
+                validated.add(binding);
+            }
+        }
+        forestBindings = List.copyOf(validated);
+        save();
+    }
+
+    public static void resetForestBindings() {
+        forestBindings = defaultForestBindings();
+        save();
+    }
+
+    /** Temporary compatibility for callers replaced by the native EMI bind adapter in the next wave. */
+    @Deprecated
+    public static int getForestKeyCode() {
+        return forestBindings.stream().filter(binding -> binding.type == BindingType.KEYSYM)
+                .mapToInt(ForestBinding::value).findFirst().orElse(DEFAULT_FOREST_KEY_CODE);
+    }
+
+    /** Temporary compatibility for callers replaced by the native EMI bind adapter in the next wave. */
+    @Deprecated
     public static void setForestKeyCode(int keyCode) {
-        forestKeyCode = keyCode;
+        forestBindings = migratedBindings(keyCode);
         save();
     }
 
@@ -221,7 +267,7 @@ public final class ForestBookmarks {
         resolutionScope = ResolutionScope.ALL_ROOTS;
         rootLayout = RootLayout.LIST;
         quantityMode = QuantityMode.ICON;
-        forestKeyCode = DEFAULT_FOREST_KEY_CODE;
+        forestBindings = defaultForestBindings();
         boxEnabled = true;
         stacksPerBox = 27;
         Path path = path();
@@ -230,7 +276,9 @@ public final class ForestBookmarks {
         }
         try {
             JsonObject root = GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8), JsonObject.class);
-            if (root == null || intValue(root, "schema", -1) != SCHEMA_VERSION) {
+            int schema = root == null ? -1 : intValue(root, "schema", -1);
+            boolean migrateLegacyBindings = false;
+            if (root == null || (schema != LEGACY_SCHEMA_VERSION && schema != SCHEMA_VERSION)) {
                 Constants.LOG.warn("Ignoring unsupported RecipeForest bookmark schema in {}", path);
                 return;
             }
@@ -242,7 +290,9 @@ public final class ForestBookmarks {
                         ResolutionScope.ALL_ROOTS);
                 rootLayout = enumValue(settings, "rootLayout", RootLayout.class, RootLayout.LIST);
                 quantityMode = enumValue(settings, "quantityMode", QuantityMode.class, QuantityMode.ICON);
-                forestKeyCode = intValue(settings, "forestKeyCode", DEFAULT_FOREST_KEY_CODE);
+                forestBindings = readForestBindings(settings);
+                migrateLegacyBindings = schema == LEGACY_SCHEMA_VERSION && !settings.has("forestBindings")
+                        && validLegacyKeyCode(settings);
                 boxEnabled = booleanValue(settings, "boxEnabled", true);
                 stacksPerBox = clamp(intValue(settings, "stacksPerBox", 27), 1, 256);
             }
@@ -271,6 +321,9 @@ public final class ForestBookmarks {
                     Constants.LOG.warn("Skipping malformed RecipeForest tree bookmark", exception);
                 }
             }
+            if (migrateLegacyBindings) {
+                save();
+            }
         } catch (Exception exception) {
             Constants.LOG.error("Could not load RecipeForest bookmarks from {}", path, exception);
         }
@@ -285,7 +338,16 @@ public final class ForestBookmarks {
         settings.addProperty("resolutionScope", resolutionScope.name());
         settings.addProperty("rootLayout", rootLayout.name());
         settings.addProperty("quantityMode", quantityMode.name());
-        settings.addProperty("forestKeyCode", forestKeyCode);
+        JsonArray bindings = new JsonArray();
+        for (ForestBinding binding : forestBindings) {
+            JsonObject object = new JsonObject();
+            object.addProperty("type", binding.type.name());
+            object.addProperty("name", binding.name);
+            object.addProperty("value", binding.value);
+            object.addProperty("modifiers", binding.modifiers);
+            bindings.add(object);
+        }
+        settings.add("forestBindings", bindings);
         settings.addProperty("boxEnabled", boxEnabled);
         settings.addProperty("stacksPerBox", stacksPerBox);
         root.add("settings", settings);
@@ -330,6 +392,61 @@ public final class ForestBookmarks {
 
     private static JsonArray array(JsonObject object, String key) {
         return object.has(key) && object.get(key).isJsonArray() ? object.getAsJsonArray(key) : new JsonArray();
+    }
+
+    private static List<ForestBinding> readForestBindings(JsonObject settings) {
+        if (!settings.has("forestBindings")) {
+            return migratedBindings(intValue(settings, "forestKeyCode", DEFAULT_FOREST_KEY_CODE));
+        }
+        if (!settings.get("forestBindings").isJsonArray()) {
+            return defaultForestBindings();
+        }
+        JsonArray serialized = settings.getAsJsonArray("forestBindings");
+        List<ForestBinding> bindings = new ArrayList<>(Math.min(serialized.size(), MAX_FOREST_BINDINGS));
+        for (JsonElement element : serialized) {
+            if (bindings.size() >= MAX_FOREST_BINDINGS) {
+                break;
+            }
+            try {
+                if (element.isJsonObject()) {
+                    JsonObject object = element.getAsJsonObject();
+                    ForestBinding binding = new ForestBinding(
+                            enumValue(object, "type", BindingType.class, null),
+                            object.has("name") ? object.get("name").getAsString() : "",
+                            intValue(object, "value", -1), intValue(object, "modifiers", -1));
+                    if (!bindings.contains(binding)) {
+                        bindings.add(binding);
+                    }
+                }
+            } catch (RuntimeException exception) {
+                Constants.LOG.warn("Skipping malformed RecipeForest binding", exception);
+            }
+        }
+        return serialized.size() == 0 || !bindings.isEmpty() ? List.copyOf(bindings) : defaultForestBindings();
+    }
+
+    private static boolean validLegacyKeyCode(JsonObject settings) {
+        try {
+            return settings.has("forestKeyCode") && settings.get("forestKeyCode").isJsonPrimitive()
+                    && settings.get("forestKeyCode").getAsInt() >= 0;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static List<ForestBinding> defaultForestBindings() {
+        return List.of(
+                new ForestBinding(BindingType.KEYSYM, "key.keyboard.f", DEFAULT_FOREST_KEY_CODE, 0),
+                new ForestBinding(BindingType.KEYSYM, "key.keyboard.f", DEFAULT_FOREST_KEY_CODE, SHIFT_MODIFIER));
+    }
+
+    private static List<ForestBinding> migratedBindings(int keyCode) {
+        if (keyCode < 0) {
+            return defaultForestBindings();
+        }
+        String name = keyCode == DEFAULT_FOREST_KEY_CODE ? "key.keyboard.f" : "key.keyboard." + keyCode;
+        return List.of(new ForestBinding(BindingType.KEYSYM, name, keyCode, 0),
+                new ForestBinding(BindingType.KEYSYM, name, keyCode, SHIFT_MODIFIER));
     }
 
     private static int intValue(JsonObject object, String key, int fallback) {

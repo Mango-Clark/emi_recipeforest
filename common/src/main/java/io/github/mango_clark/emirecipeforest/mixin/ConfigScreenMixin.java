@@ -8,20 +8,37 @@ import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.systems.RenderSystem;
 
+import dev.emi.emi.EmiPort;
+import dev.emi.emi.EmiRenderHelper;
+import dev.emi.emi.input.EmiBind;
+import dev.emi.emi.runtime.EmiDrawContext;
+import dev.emi.emi.screen.ConfigEnumScreen;
 import dev.emi.emi.screen.ConfigScreen;
 import dev.emi.emi.screen.widget.config.ConfigEntryWidget;
 import dev.emi.emi.screen.widget.config.ConfigSearch;
+import dev.emi.emi.screen.widget.config.EmiBindWidget;
+import dev.emi.emi.screen.widget.config.ConfigJumpButton;
 import dev.emi.emi.screen.widget.config.GroupNameWidget;
+import dev.emi.emi.screen.widget.config.IntEdit;
 import dev.emi.emi.screen.widget.config.ListWidget;
 import dev.emi.emi.screen.widget.config.ListWidget.Entry;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
+import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.RootLayout;
+import io.github.mango_clark.emirecipeforest.input.ForestBind;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -39,20 +56,25 @@ public abstract class ConfigScreenMixin extends Screen {
     private static final int RECIPE_FOREST$CONTROL_WIDTH = 150;
     @Unique
     private static final int RECIPE_FOREST$BUTTON_HEIGHT = 20;
+    @Unique
+    private static final ResourceLocation RECIPE_FOREST$WIDGETS = EmiPort.id("emi_recipeforest",
+            "textures/gui/widgets.png");
 
     @Shadow
     public ListWidget list;
     @Shadow
     private ConfigSearch search;
+    @Shadow
+    public EmiBind activeBind;
 
     @Unique
     private boolean recipeForest$groupCollapsed;
     @Unique
-    private boolean recipeForest$capturingKey;
+    private boolean recipeForest$forestBindWasActive;
     @Unique
-    private boolean recipeForest$consumeNextKeyRelease;
+    private boolean recipeForest$anyBindWasActive;
     @Unique
-    private boolean recipeForest$keyConflict;
+    private int recipeForest$collisionRevision;
 
     protected ConfigScreenMixin(Component title) {
         super(title);
@@ -60,12 +82,8 @@ public abstract class ConfigScreenMixin extends Screen {
 
     @Inject(method = "init", at = @At("HEAD"))
     private void recipeForest$rememberGroupState(CallbackInfo ci) {
-        recipeForest$capturingKey = false;
-        recipeForest$consumeNextKeyRelease = false;
-        recipeForest$keyConflict = false;
-        if (ForestBookmarks.getForestKeyCode() == GLFW.GLFW_KEY_R) {
-            ForestBookmarks.setForestKeyCode(ForestBookmarks.DEFAULT_FOREST_KEY_CODE);
-        }
+        recipeForest$forestBindWasActive = false;
+        recipeForest$anyBindWasActive = false;
         if (list == null) {
             return;
         }
@@ -100,48 +118,48 @@ public abstract class ConfigScreenMixin extends Screen {
         List<ConfigEntryWidget> settings = new ArrayList<>();
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.resolution_scope"), currentSearch,
+                recipeForest$tooltip("screen.emi_recipeforest.settings.resolution_scope.tooltip"),
                 () -> recipeForest$enumLabel("resolution_scope", ForestBookmarks.getResolutionScope()),
-                () -> ForestBookmarks.setResolutionScope(recipeForest$next(ForestBookmarks.getResolutionScope()))));
+                this::recipeForest$openResolutionScopeScreen));
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.root_layout"), currentSearch,
+                recipeForest$tooltip("screen.emi_recipeforest.settings.root_layout.tooltip"),
                 () -> recipeForest$enumLabel("root_layout", ForestBookmarks.getRootLayout()),
                 () -> ForestBookmarks.setRootLayout(recipeForest$next(ForestBookmarks.getRootLayout()))));
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.quantity_mode"), currentSearch,
+                recipeForest$tooltip("screen.emi_recipeforest.settings.quantity_mode.tooltip"),
                 () -> recipeForest$enumLabel("quantity_mode", ForestBookmarks.getQuantityMode()),
                 () -> ForestBookmarks.setQuantityMode(recipeForest$next(ForestBookmarks.getQuantityMode()))));
-        settings.add(new RecipeForestKeyEntry(currentSearch, () -> recipeForest$capturingKey,
-                () -> recipeForest$keyConflict, () -> {
-                    recipeForest$keyConflict = false;
-                    recipeForest$capturingKey = true;
-                }, () -> {
-                    ForestBookmarks.setForestKeyCode(ForestBookmarks.DEFAULT_FOREST_KEY_CODE);
-                    recipeForest$capturingKey = false;
-                    recipeForest$keyConflict = false;
-                }));
+        settings.add(new RecipeForestBindEntry((ConfigScreen) (Object) this, currentSearch,
+                () -> recipeForest$collisionRevision));
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.box_enabled"), currentSearch,
+                recipeForest$tooltip("screen.emi_recipeforest.settings.box_enabled.tooltip"),
                 () -> Component.translatable(ForestBookmarks.isBoxEnabled()
                         ? "screen.emi_recipeforest.settings.enabled"
                         : "screen.emi_recipeforest.settings.disabled"),
                 () -> ForestBookmarks.setBoxEnabled(!ForestBookmarks.isBoxEnabled())));
-        settings.add(new RecipeForestStepperEntry(
-                Component.translatable("screen.emi_recipeforest.settings.stacks_per_box", ""), currentSearch,
-                ForestBookmarks::getStacksPerBox, ForestBookmarks::setStacksPerBox, 1, 256, () -> true));
+        settings.add(new RecipeForestIntEntry(
+                Component.translatable("screen.emi_recipeforest.settings.stacks_per_box", ""), currentSearch));
         settings.add(new RecipeForestStepperEntry(
                 Component.translatable("screen.emi_recipeforest.settings.columns", ""), currentSearch,
+                recipeForest$tooltip("screen.emi_recipeforest.settings.columns.tooltip"),
                 ForestBookmarks::getRootGridColumns,
                 value -> ForestBookmarks.setRootGridSize(value, ForestBookmarks.getRootGridRows()),
                 1, 16, () -> ForestBookmarks.getRootLayout() == RootLayout.GRID));
         settings.add(new RecipeForestStepperEntry(
                 Component.translatable("screen.emi_recipeforest.settings.rows", ""), currentSearch,
+                recipeForest$tooltip("screen.emi_recipeforest.settings.rows.tooltip"),
                 ForestBookmarks::getRootGridRows,
                 value -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns(), value),
                 1, 8, () -> ForestBookmarks.getRootLayout() == RootLayout.GRID));
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.title"), currentSearch,
-                () -> Component.translatable("screen.emi_recipeforest.settings.forest_key.reset"),
-                this::recipeForest$resetSettings));
+                recipeForest$tooltip("screen.emi_recipeforest.settings.reset.tooltip"),
+                () -> Component.translatable("screen.emi_recipeforest.settings.forest_key.reset")
+                        .withStyle(ChatFormatting.RED),
+                this::recipeForest$confirmResetSettings));
 
         List<Entry> inserted = new ArrayList<>(settings.size() + 1);
         inserted.add(group);
@@ -157,55 +175,102 @@ public abstract class ConfigScreenMixin extends Screen {
         entries.addAll(devIndex, inserted);
     }
 
+    @Inject(method = "addJumpButtons()V", at = @At("RETURN"))
+    private void recipeForest$addJumpButton(CallbackInfo ci) {
+        boolean hasDevGroup = list.children().stream()
+                .anyMatch(entry -> entry instanceof GroupNameWidget group && "dev".equals(group.id));
+        List<ConfigJumpButton> nativeButtons = children().stream()
+                .filter(ConfigJumpButton.class::isInstance).map(ConfigJumpButton.class::cast).toList();
+        if (!hasDevGroup || nativeButtons.isEmpty()) {
+            throw new IllegalStateException("Incompatible EMI config index. RecipeForest supports EMI 1.1.13-1.1.24; "
+                    + "expected ConfigScreen.addJumpButtons() to create a final Dev ConfigJumpButton.");
+        }
+
+        ConfigJumpButton dev = nativeButtons.get(nativeButtons.size() - 1);
+        int recipeForestY = dev.getY() - 8;
+        for (ConfigJumpButton button : nativeButtons) {
+            button.setY(button.getY() - 8);
+        }
+        dev.setY(dev.getY() + 16);
+        addRenderableWidget(new RecipeForestJumpButton(2, recipeForestY,
+                () -> ((ConfigScreen) (Object) this).jump(RECIPE_FOREST$GROUP_ID),
+                () -> recipeForest$collisionRevision));
+    }
+
+    @Unique
+    private void recipeForest$openResolutionScopeScreen() {
+        List<ConfigEnumScreen.Entry<ResolutionScope>> entries = new ArrayList<>();
+        for (ResolutionScope scope : ResolutionScope.values()) {
+            String key = "screen.emi_recipeforest.settings.resolution_scope."
+                    + scope.name().toLowerCase(Locale.ROOT);
+            entries.add(new ConfigEnumScreen.Entry<>(scope, Component.translatable(key),
+                    List.of(ClientTooltipComponent.create(
+                            Component.translatable(key + ".tooltip").getVisualOrderText()))));
+        }
+        minecraft.setScreen(new ConfigEnumScreen<>((ConfigScreen) (Object) this, entries,
+                ForestBookmarks::setResolutionScope));
+    }
+
+    @Unique
+    private void recipeForest$confirmResetSettings() {
+        ConfigScreen current = (ConfigScreen) (Object) this;
+        minecraft.setScreen(new ConfirmScreen(confirmed -> {
+            if (confirmed) {
+                recipeForest$resetSettings();
+            }
+            minecraft.setScreen(current);
+        }, Component.translatable("screen.emi_recipeforest.settings.reset.confirm.title"),
+                Component.translatable("screen.emi_recipeforest.settings.reset.confirm.body")));
+    }
+
     @Unique
     private void recipeForest$resetSettings() {
         ForestBookmarks.setResolutionScope(ForestBookmarks.ResolutionScope.ALL_ROOTS);
         ForestBookmarks.setRootLayout(RootLayout.LIST);
         ForestBookmarks.setQuantityMode(ForestBookmarks.QuantityMode.ICON);
-        ForestBookmarks.setForestKeyCode(ForestBookmarks.DEFAULT_FOREST_KEY_CODE);
+        ForestBind.INSTANCE.setToDefault();
         ForestBookmarks.setBoxEnabled(true);
         ForestBookmarks.setStacksPerBox(27);
         ForestBookmarks.setRootGridSize(8, 2);
-        recipeForest$capturingKey = false;
-        recipeForest$keyConflict = false;
     }
 
-    @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
-    private void recipeForest$captureKey(int keyCode, int scanCode, int modifiers,
+    @Inject(method = { "keyPressed", "keyReleased" }, at = @At("HEAD"))
+    private void recipeForest$trackForestBindKeyStart(int keyCode, int scanCode, int modifiers,
             CallbackInfoReturnable<Boolean> cir) {
-        if (!recipeForest$capturingKey) {
-            return;
-        }
-        recipeForest$consumeNextKeyRelease = true;
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            recipeForest$capturingKey = false;
-            recipeForest$keyConflict = false;
-        } else if (keyCode == GLFW.GLFW_KEY_R) {
-            recipeForest$capturingKey = false;
-            recipeForest$keyConflict = true;
-        } else if (keyCode != GLFW.GLFW_KEY_UNKNOWN && !recipeForest$isModifier(keyCode)) {
-            ForestBookmarks.setForestKeyCode(keyCode);
-            recipeForest$capturingKey = false;
-            recipeForest$keyConflict = false;
-        }
-        cir.setReturnValue(true);
+        recipeForest$forestBindWasActive |= activeBind == ForestBind.INSTANCE;
+        recipeForest$anyBindWasActive |= activeBind != null;
     }
 
-    @Inject(method = "keyReleased", at = @At("HEAD"), cancellable = true)
-    private void recipeForest$consumeCapturedKeyRelease(int keyCode, int scanCode, int modifiers,
+    @Inject(method = { "keyPressed", "keyReleased" }, at = @At("RETURN"))
+    private void recipeForest$trackForestBindKeyEnd(int keyCode, int scanCode, int modifiers,
             CallbackInfoReturnable<Boolean> cir) {
-        if (recipeForest$capturingKey || recipeForest$consumeNextKeyRelease) {
-            recipeForest$consumeNextKeyRelease = false;
-            cir.setReturnValue(true);
-        }
+        recipeForest$persistFinishedForestBind();
+    }
+
+    @Inject(method = "mouseClicked", at = @At("HEAD"))
+    private void recipeForest$trackForestBindMouseStart(double mouseX, double mouseY, int button,
+            CallbackInfoReturnable<Boolean> cir) {
+        recipeForest$forestBindWasActive |= activeBind == ForestBind.INSTANCE;
+        recipeForest$anyBindWasActive |= activeBind != null;
+    }
+
+    @Inject(method = "mouseClicked", at = @At("RETURN"))
+    private void recipeForest$trackForestBindMouseEnd(double mouseX, double mouseY, int button,
+            CallbackInfoReturnable<Boolean> cir) {
+        recipeForest$persistFinishedForestBind();
     }
 
     @Unique
-    private static boolean recipeForest$isModifier(int keyCode) {
-        return keyCode == GLFW.GLFW_KEY_LEFT_SHIFT || keyCode == GLFW.GLFW_KEY_RIGHT_SHIFT
-                || keyCode == GLFW.GLFW_KEY_LEFT_CONTROL || keyCode == GLFW.GLFW_KEY_RIGHT_CONTROL
-                || keyCode == GLFW.GLFW_KEY_LEFT_ALT || keyCode == GLFW.GLFW_KEY_RIGHT_ALT
-                || keyCode == GLFW.GLFW_KEY_LEFT_SUPER || keyCode == GLFW.GLFW_KEY_RIGHT_SUPER;
+    private void recipeForest$persistFinishedForestBind() {
+        if (recipeForest$anyBindWasActive && activeBind == null) {
+            recipeForest$anyBindWasActive = false;
+            recipeForest$collisionRevision++;
+        }
+        if (recipeForest$forestBindWasActive && activeBind != ForestBind.INSTANCE) {
+            recipeForest$forestBindWasActive = false;
+            ForestBind.INSTANCE.setBinds(ForestBind.INSTANCE.boundKeys.stream()
+                    .filter(key -> !key.isUnbound()).toArray(EmiBind.ModifiedKey[]::new));
+        }
     }
 
     @Unique
@@ -221,39 +286,146 @@ public abstract class ConfigScreenMixin extends Screen {
     }
 
     @Unique
-    private static final class RecipeForestKeyEntry extends ConfigEntryWidget {
-        private final BooleanSupplier capturing;
-        private final BooleanSupplier conflict;
-        private final Button keyButton;
-        private final Button resetButton;
+    private static List<ClientTooltipComponent> recipeForest$tooltip(String key) {
+        return List.of(ClientTooltipComponent.create(Component.translatable(key).getVisualOrderText()));
+    }
 
-        private RecipeForestKeyEntry(Supplier<String> currentSearch, BooleanSupplier capturing,
-                BooleanSupplier conflict, Runnable beginCapture, Runnable reset) {
-            super(Component.translatable("screen.emi_recipeforest.settings.forest_key"), List.of(), currentSearch,
-                    RECIPE_FOREST$BUTTON_HEIGHT);
-            this.capturing = capturing;
-            this.conflict = conflict;
-            keyButton = Button.builder(Component.empty(), button -> beginCapture.run())
-                    .bounds(0, 0, 98, RECIPE_FOREST$BUTTON_HEIGHT).build();
-            resetButton = Button.builder(
-                    Component.translatable("screen.emi_recipeforest.settings.forest_key.reset"),
-                    button -> reset.run()).bounds(0, 0, 48, RECIPE_FOREST$BUTTON_HEIGHT).build();
-            setChildren(List.of(keyButton, resetButton));
+    @Unique
+    private static final class RecipeForestJumpButton extends AbstractButton {
+        private final Runnable action;
+        private final IntSupplier collisionRevision;
+        private int lastCollisionRevision = -1;
+        private List<ForestBind.Collision> collisions = List.of();
+
+        private RecipeForestJumpButton(int x, int y, Runnable action, IntSupplier collisionRevision) {
+            super(x, y, 16, 16, Component.translatable("screen.emi_recipeforest.settings.title"));
+            this.action = action;
+            this.collisionRevision = collisionRevision;
+        }
+
+        @Override
+        public void onPress() {
+            action.run();
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {
+            defaultButtonNarrationText(output);
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics raw, int mouseX, int mouseY, float delta) {
+            refreshCollisions();
+            EmiDrawContext context = EmiDrawContext.wrap(raw);
+            if (!collisions.isEmpty()) {
+                context.setColor(1, 0.65f, 0.2f);
+            } else if (isMouseOver(mouseX, mouseY)) {
+                context.setColor(0.5f, 0.6f, 1f);
+            }
+            context.push();
+            context.matrices().translate(0, 0, 100);
+            context.drawTexture(RECIPE_FOREST$WIDGETS, getX(), getY(), 0, 0, 16, 16, 16, 64, 32);
+            context.pop();
+            context.resetColor();
+
+            if (isMouseOver(mouseX, mouseY)) {
+                List<ClientTooltipComponent> tooltip = new ArrayList<>();
+                tooltip.add(ClientTooltipComponent.create(getMessage().getVisualOrderText()));
+                tooltip.addAll(recipeForest$tooltip("screen.emi_recipeforest.settings.jump.tooltip"));
+                for (ForestBind.Collision collision : collisions) {
+                    tooltip.add(ClientTooltipComponent.create(Component.translatable(
+                            "screen.emi_recipeforest.settings.forest_key.override", collision.translatedName())
+                            .withStyle(ChatFormatting.GOLD).getVisualOrderText()));
+                }
+                context.push();
+                RenderSystem.disableDepthTest();
+                EmiRenderHelper.drawTooltip(Minecraft.getInstance().screen, context, tooltip, mouseX, mouseY);
+                RenderSystem.enableDepthTest();
+                context.pop();
+            }
+        }
+
+        private void refreshCollisions() {
+            int revision = collisionRevision.getAsInt();
+            if (revision != lastCollisionRevision) {
+                lastCollisionRevision = revision;
+                collisions = ForestBind.INSTANCE.getCollisions();
+            }
+        }
+    }
+
+    @Unique
+    private static final class RecipeForestBindEntry extends EmiBindWidget {
+        private final IntSupplier collisionRevision;
+        private int lastCollisionRevision = -1;
+        private List<ForestBind.Collision> collisions = List.of();
+        private int statusX;
+        private int statusY;
+
+        private RecipeForestBindEntry(ConfigScreen screen, Supplier<String> currentSearch,
+                IntSupplier collisionRevision) {
+            super(screen, recipeForest$tooltip("screen.emi_recipeforest.settings.forest_key.tooltip"), currentSearch,
+                    ForestBind.INSTANCE);
+            this.collisionRevision = collisionRevision;
         }
 
         @Override
         public void update(int y, int x, int width, int height) {
-            int left = x + width - RECIPE_FOREST$CONTROL_WIDTH;
-            keyButton.setX(left);
-            keyButton.setY(y);
-            keyButton.setMessage(conflict.getAsBoolean()
-                    ? Component.translatable("screen.emi_recipeforest.settings.forest_key.conflict_r")
-                    : capturing.getAsBoolean()
-                            ? Component.translatable("screen.emi_recipeforest.settings.forest_key.capture")
-                            : InputConstants.Type.KEYSYM.getOrCreate(ForestBookmarks.getForestKeyCode())
-                                    .getDisplayName());
-            resetButton.setX(left + 102);
-            resetButton.setY(y);
+            super.update(y, x, width, height);
+            int revision = collisionRevision.getAsInt();
+            if (revision != lastCollisionRevision) {
+                lastCollisionRevision = revision;
+                collisions = ForestBind.INSTANCE.getCollisions();
+            }
+            statusX = x + width - 244;
+            statusY = y + 2;
+        }
+
+        @Override
+        public void render(GuiGraphics raw, int index, int y, int x, int width, int height, int mouseX, int mouseY,
+                boolean hovered, float delta) {
+            super.render(raw, index, y, x, width, height, mouseX, mouseY, hovered, delta);
+            if (!collisions.isEmpty()) {
+                EmiDrawContext context = EmiDrawContext.wrap(raw);
+                context.setColor(1, 0.65f, 0.2f);
+                context.drawTexture(RECIPE_FOREST$WIDGETS, statusX, statusY, 0, 0, 16, 16, 16, 64, 32);
+                context.resetColor();
+            }
+        }
+
+        @Override
+        public List<ClientTooltipComponent> getTooltip(int mouseX, int mouseY) {
+            List<ClientTooltipComponent> tooltip = new ArrayList<>(super.getTooltip(mouseX, mouseY));
+            for (ForestBind.Collision collision : collisions) {
+                tooltip.add(ClientTooltipComponent.create(Component.translatable(
+                        "screen.emi_recipeforest.settings.forest_key.override", collision.translatedName())
+                        .withStyle(ChatFormatting.GOLD).getVisualOrderText()));
+            }
+            return List.copyOf(tooltip);
+        }
+    }
+
+    @Unique
+    private static final class RecipeForestIntEntry extends ConfigEntryWidget {
+        private final IntEdit edit;
+
+        private RecipeForestIntEntry(Component name, Supplier<String> currentSearch) {
+            super(name, recipeForest$tooltip("screen.emi_recipeforest.settings.stacks_per_box.tooltip"), currentSearch,
+                    RECIPE_FOREST$BUTTON_HEIGHT);
+            edit = new IntEdit(RECIPE_FOREST$CONTROL_WIDTH, ForestBookmarks::getStacksPerBox,
+                    value -> ForestBookmarks.setStacksPerBox(Math.max(1, Math.min(256, value))));
+            setChildren(List.of(edit.text, edit.up, edit.down));
+        }
+
+        @Override
+        public void update(int y, int x, int width, int height) {
+            edit.setPosition(x + width - RECIPE_FOREST$CONTROL_WIDTH, y);
+            if (!edit.text.isFocused()) {
+                String value = Integer.toString(ForestBookmarks.getStacksPerBox());
+                if (!value.equals(edit.text.getValue())) {
+                    edit.text.setValue(value);
+                }
+            }
         }
     }
 
@@ -263,8 +435,9 @@ public abstract class ConfigScreenMixin extends Screen {
         private final Button button;
 
         private RecipeForestValueEntry(Component name, Supplier<String> currentSearch,
+                List<ClientTooltipComponent> tooltip,
                 Supplier<Component> value, Runnable onPress) {
-            super(name, List.of(), currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
+            super(name, tooltip, currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
             this.value = value;
             button = Button.builder(value.get(), ignored -> onPress.run())
                     .bounds(0, 0, RECIPE_FOREST$CONTROL_WIDTH, RECIPE_FOREST$BUTTON_HEIGHT).build();
@@ -290,9 +463,10 @@ public abstract class ConfigScreenMixin extends Screen {
         private final Button display;
         private final Button increase;
 
-        private RecipeForestStepperEntry(Component name, Supplier<String> currentSearch, IntSupplier value,
+        private RecipeForestStepperEntry(Component name, Supplier<String> currentSearch,
+                List<ClientTooltipComponent> tooltip, IntSupplier value,
                 IntConsumer setter, int minimum, int maximum, BooleanSupplier visible) {
-            super(name, List.of(), currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
+            super(name, tooltip, currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
             this.value = value;
             this.setter = setter;
             this.minimum = minimum;

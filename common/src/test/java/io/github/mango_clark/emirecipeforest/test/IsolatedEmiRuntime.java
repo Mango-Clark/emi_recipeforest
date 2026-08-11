@@ -92,10 +92,10 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 """),
             Map.entry("net.minecraft.network.chat.Component", """
                 package net.minecraft.network.chat;
-                public class Component { public static MutableComponent translatable(String key, Object... args) { return new MutableComponent(); } public Object getVisualOrderText() { return this; } }
+                public interface Component { static MutableComponent translatable(String key) { return new MutableComponent(); } static MutableComponent translatable(String key, Object... args) { return new MutableComponent(); } default Object getVisualOrderText() { return this; } }
                 """),
             Map.entry("net.minecraft.network.chat.MutableComponent", """
-                package net.minecraft.network.chat; public class MutableComponent extends Component {}
+                package net.minecraft.network.chat; public class MutableComponent implements Component {}
                 """),
             Map.entry("net.minecraft.world.level.ItemLike", """
                 package net.minecraft.world.level; public interface ItemLike {}
@@ -109,6 +109,17 @@ final class IsolatedEmiRuntime implements AutoCloseable {
             Map.entry("net.minecraft.client.Minecraft", """
                 package net.minecraft.client;
                 public final class Minecraft { private static final Minecraft INSTANCE = new Minecraft(); public java.io.File gameDirectory = new java.io.File("."); public static Minecraft getInstance() { return INSTANCE; } }
+                """),
+            Map.entry("com.mojang.blaze3d.platform.InputConstants", """
+                package com.mojang.blaze3d.platform;
+                public final class InputConstants {
+                    public enum Type { KEYSYM, SCANCODE, MOUSE;
+                        public Key getOrCreate(int value){return new Key(this,value,name(this,value));}
+                        private static String name(Type type,int value){if(type==MOUSE)return value==0?"key.mouse.left":"key.mouse."+value;if(type==SCANCODE)return "scancode."+value;return switch(value){case 65->"key.keyboard.a";case 70->"key.keyboard.f";case 71->"key.keyboard.g";case 82->"key.keyboard.r";default->"key.keyboard."+value;};}
+                    }
+                    public static final Key UNKNOWN=new Key(Type.KEYSYM,-1,"key.keyboard.unknown");
+                    public static final class Key { private final Type type;private final int value;private final String name;public Key(Type type,int value,String name){this.type=type;this.value=value;this.name=name;}public Type getType(){return type;}public int getValue(){return value;}public String getName(){return name;}public boolean equals(Object o){return o instanceof Key k&&type==k.type&&value==k.value;}public int hashCode(){return type.hashCode()*31+value;} }
+                }
                 """),
             Map.entry("com.google.gson.JsonElement", """
                 package com.google.gson;
@@ -202,6 +213,33 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 """),
             Map.entry("dev.emi.emi.EmiPort", """
                 package dev.emi.emi; public final class EmiPort { public static net.minecraft.resources.ResourceLocation id(String id){return new net.minecraft.resources.ResourceLocation(id);} }
+                """),
+            Map.entry("dev.emi.emi.input.EmiInput", """
+                package dev.emi.emi.input; public final class EmiInput { public static final int CONTROL_MASK=1,ALT_MASK=2,SHIFT_MASK=4;private static int modifiers;public static int getCurrentModifiers(){return modifiers;}public static void setCurrentModifiers(int value){modifiers=value;}public static int maskFromCode(int code){return 0;} }
+                """),
+            Map.entry("dev.emi.emi.input.EmiBind", """
+                package dev.emi.emi.input;
+                public class EmiBind {
+                    public static final int MAX_BINDS=4;public final String translationKey;public final java.util.List<ModifiedKey> defaultKeys;public java.util.List<ModifiedKey> boundKeys;
+                    public EmiBind(String key,int code){this(key,ModifiedKey.of(code,0));}public EmiBind(String key,int modifiers,int code){this(key,ModifiedKey.of(code,modifiers));}
+                    public EmiBind(String key,ModifiedKey... defaults){translationKey=key;defaultKeys=java.util.List.of(defaults);boundKeys=new java.util.ArrayList<>(defaultKeys);updateBinds();}
+                    public void updateBinds(){boundKeys.removeIf(k->k.isUnbound()&&boundKeys.indexOf(k)<boundKeys.size()-1);if(boundKeys.isEmpty()||(!boundKeys.get(boundKeys.size()-1).isUnbound()&&boundKeys.size()<MAX_BINDS))boundKeys.add(new ModifiedKey(com.mojang.blaze3d.platform.InputConstants.UNKNOWN,0));}
+                    public void setBind(int offset,ModifiedKey key){if(offset>=0&&offset<boundKeys.size())boundKeys.set(offset,key);updateBinds();}
+                    public void setBinds(ModifiedKey... keys){boundKeys=new java.util.ArrayList<>(java.util.List.of(keys));updateBinds();}
+                    public void setToDefault(){boundKeys=new java.util.ArrayList<>(defaultKeys);updateBinds();}
+                    public boolean matchesKey(int keyCode,int scanCode){for(var b:boundKeys)if(!b.isUnbound()&&EmiInput.getCurrentModifiers()==b.modifiersToMatch()&&b.key.getType()!=com.mojang.blaze3d.platform.InputConstants.Type.MOUSE&&b.key.getValue()==(b.key.getType()==com.mojang.blaze3d.platform.InputConstants.Type.SCANCODE?scanCode:keyCode))return true;return false;}
+                    public boolean matchesMouse(int code){for(var b:boundKeys)if(!b.isUnbound()&&EmiInput.getCurrentModifiers()==b.modifiersToMatch()&&b.key.getType()==com.mojang.blaze3d.platform.InputConstants.Type.MOUSE&&b.key.getValue()==code)return true;return false;}
+                    public static record ModifiedKey(com.mojang.blaze3d.platform.InputConstants.Key key,int modifiers){public static ModifiedKey of(int code,int modifiers){return new ModifiedKey(com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(code),modifiers);}public int modifiersToMatch(){return modifiers;}public boolean isUnbound(){return key.getValue()<0;}}
+                }
+                """),
+            Map.entry("dev.emi.emi.config.EmiConfig", """
+                package dev.emi.emi.config;
+                public final class EmiConfig {
+                    @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME) @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD) public @interface ConfigValue { String value(); }
+                    @ConfigValue("binds.view-recipes") public static dev.emi.emi.input.EmiBind viewRecipes=new dev.emi.emi.input.EmiBind("key.emi.view_recipes",82);
+                    @ConfigValue("binds.favorite") public static dev.emi.emi.input.EmiBind favorite=new dev.emi.emi.input.EmiBind("key.emi.favorite",65);
+                    @ConfigValue("ui.not-a-bind") public static dev.emi.emi.input.EmiBind ignored=new dev.emi.emi.input.EmiBind("key.emi.ignored",70);
+                }
                 """),
             Map.entry("dev.emi.emi.api.EmiApi", """
                 package dev.emi.emi.api; public final class EmiApi { private static final dev.emi.emi.api.recipe.EmiRecipeManager MANAGER=new dev.emi.emi.api.recipe.TestRecipeManager(); public static dev.emi.emi.api.recipe.EmiRecipeManager getRecipeManager(){return MANAGER;} }

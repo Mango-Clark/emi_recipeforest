@@ -108,11 +108,17 @@ public final class EmiCompatibility {
                     requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
             case "dev.emi.emi.screen.ConfigScreen" -> {
                 requireField(targetClass, "list", "Ldev/emi/emi/screen/widget/config/ListWidget;", false, missing);
+                requireField(targetClass, "activeBind", "Ldev/emi/emi/input/EmiBind;", false, missing);
                 requirePrivateField(targetClass, "search",
                         "Ldev/emi/emi/screen/widget/config/ConfigSearch;", false, missing);
                 requireProtectedMethod(targetClass, "init", "()V", false, missing);
+                requirePrivateMethod(targetClass, "addJumpButtons", "()V", false, missing);
+                requireMethod(targetClass, "jump", "(Ljava/lang/String;)V", false, missing);
+                requireMethod(targetClass, "mouseClicked", "(DDI)Z", false, missing);
                 requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
                 requireMethod(targetClass, "keyReleased", "(III)Z", false, missing);
+                requireNewInstructions(targetClass, "addJumpButtons", "()V",
+                        "dev/emi/emi/screen/widget/config/ConfigJumpButton", 1, missing);
             }
             case "dev.emi.emi.screen.RecipeScreen" -> {
                 requireMethod(targetClass, "<init>",
@@ -132,6 +138,7 @@ public final class EmiCompatibility {
             }
             case "dev.emi.emi.screen.EmiScreenManager" -> {
                 requireMethod(targetClass, "keyPressed", "(III)Z", true, missing);
+                requireMethod(targetClass, "mouseClicked", "(DDI)Z", true, missing);
                 requireMethod(targetClass, "mouseReleased", "(DDI)Z", true, missing);
                 requireMethod(targetClass, "mouseDragged", "(DDIDD)Z", true, missing);
                 requireMethod(targetClass, "repopulatePanels", "(Ldev/emi/emi/config/SidebarType;)V", true, missing);
@@ -241,6 +248,21 @@ public final class EmiCompatibility {
         missing.add((owner == null ? "<missing-class>" : owner.name) + '.' + name + descriptor + " [protected]");
     }
 
+    private static void requirePrivateMethod(ClassNode owner, String name, String descriptor,
+            boolean requireStatic, List<String> missing) {
+        if (owner != null) {
+            for (MethodNode method : owner.methods) {
+                int visibility = method.access & (Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED | Opcodes.ACC_PRIVATE);
+                if (method.name.equals(name) && method.desc.equals(descriptor)
+                        && visibility == Opcodes.ACC_PRIVATE
+                        && ((method.access & Opcodes.ACC_STATIC) != 0) == requireStatic) {
+                    return;
+                }
+            }
+        }
+        missing.add((owner == null ? "<missing-class>" : owner.name) + '.' + name + descriptor + " [private]");
+    }
+
     private static void requireNewInstructions(ClassNode owner, String methodName, String methodDescriptor,
             String type, int expectedCount, List<String> missing) {
         if (owner != null) {
@@ -291,6 +313,20 @@ public final class EmiCompatibility {
                 + " [private]");
     }
 
+    private static void requireExtensibleClass(ClassNode owner, List<String> missing) {
+        if (owner != null && (owner.access & (Opcodes.ACC_INTERFACE | Opcodes.ACC_FINAL)) == 0) {
+            return;
+        }
+        missing.add((owner == null ? "<missing-class>" : owner.name) + " [non-final class]");
+    }
+
+    private static void requireSuperclass(ClassNode owner, String superclass, List<String> missing) {
+        if (owner != null && superclass.equals(owner.superName)) {
+            return;
+        }
+        missing.add((owner == null ? "<missing-class>" : owner.name) + " extends " + superclass);
+    }
+
     private static CatalystAccess resolveCatalystAccess() {
         try {
             Field field = MaterialNode.class.getField("catalyst");
@@ -332,11 +368,21 @@ public final class EmiCompatibility {
             ClassNode recipeScreen = readClass("dev/emi/emi/screen/RecipeScreen", missing);
             ClassNode reloadManager = readClass("dev/emi/emi/runtime/EmiReloadManager", missing);
             ClassNode configScreen = readClass("dev/emi/emi/screen/ConfigScreen", missing);
+            ClassNode configEnumScreen = readClass("dev/emi/emi/screen/ConfigEnumScreen", missing);
+            ClassNode configEnumEntry = readClass("dev/emi/emi/screen/ConfigEnumScreen$Entry", missing);
             ClassNode configList = readClass("dev/emi/emi/screen/widget/config/ListWidget", missing);
             ClassNode configGroup = readClass("dev/emi/emi/screen/widget/config/GroupNameWidget", missing);
             ClassNode configEntry = readClass("dev/emi/emi/screen/widget/config/ConfigEntryWidget", missing);
             ClassNode configSearch = readClass("dev/emi/emi/screen/widget/config/ConfigSearch", missing);
+            ClassNode configJumpButton = readClass("dev/emi/emi/screen/widget/config/ConfigJumpButton", missing);
+            ClassNode bindWidget = readClass("dev/emi/emi/screen/widget/config/EmiBindWidget", missing);
+            ClassNode intEdit = readClass("dev/emi/emi/screen/widget/config/IntEdit", missing);
             ClassNode screenManager = readClass("dev/emi/emi/screen/EmiScreenManager", missing);
+            ClassNode renderHelper = readClass("dev/emi/emi/EmiRenderHelper", missing);
+            ClassNode emiConfig = readClass("dev/emi/emi/config/EmiConfig", missing);
+            ClassNode configValue = readClass("dev/emi/emi/config/EmiConfig$ConfigValue", missing);
+            ClassNode emiBind = readClass("dev/emi/emi/input/EmiBind", missing);
+            ClassNode modifiedKey = readClass("dev/emi/emi/input/EmiBind$ModifiedKey", missing);
             ClassNode emiInput = readClass("dev/emi/emi/input/EmiInput", missing);
             ClassNode stackInteraction = readClass("dev/emi/emi/api/stack/EmiStackInteraction", missing);
             ClassNode emiApi = readClass("dev/emi/emi/api/EmiApi", missing);
@@ -394,11 +440,23 @@ public final class EmiCompatibility {
             requireMethod(recipeScreen, "onClose", "()V", false, missing);
             requireField(recipeScreen, "resolve", "Ldev/emi/emi/api/stack/EmiIngredient;", true, missing);
             requireField(configScreen, "list", "Ldev/emi/emi/screen/widget/config/ListWidget;", false, missing);
+            requireField(configScreen, "activeBind", "Ldev/emi/emi/input/EmiBind;", false, missing);
             requirePrivateField(configScreen, "search",
                     "Ldev/emi/emi/screen/widget/config/ConfigSearch;", false, missing);
             requireProtectedMethod(configScreen, "init", "()V", false, missing);
+            requirePrivateMethod(configScreen, "addJumpButtons", "()V", false, missing);
+            requireMethod(configScreen, "jump", "(Ljava/lang/String;)V", false, missing);
+            requireMethod(configScreen, "mouseClicked", "(DDI)Z", false, missing);
             requireMethod(configScreen, "keyPressed", "(III)Z", false, missing);
             requireMethod(configScreen, "keyReleased", "(III)Z", false, missing);
+            requireNewInstructions(configScreen, "addJumpButtons", "()V",
+                    "dev/emi/emi/screen/widget/config/ConfigJumpButton", 1, missing);
+            requireMethod(configEnumScreen, "<init>",
+                    "(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Consumer;)V",
+                    false, missing);
+            requireMethod(configEnumEntry, "<init>",
+                    "(Ljava/lang/Object;Lnet/minecraft/network/chat/Component;Ljava/util/List;)V",
+                    false, missing);
             requireMethod(configList, "children", "()Ljava/util/List;", false, missing);
             requireMethod(configList, "addEntry",
                     "(Ldev/emi/emi/screen/widget/config/ListWidget$Entry;)I", false, missing);
@@ -412,15 +470,53 @@ public final class EmiCompatibility {
                     false, missing);
             requireMethod(configEntry, "setChildren", "(Ljava/util/List;)V", false, missing);
             requireMethod(configEntry, "update", "(IIII)V", false, missing);
+            requireMethod(configEntry, "render",
+                    "(Lnet/minecraft/client/gui/GuiGraphics;IIIIIIIZF)V", false, missing);
+            requireMethod(configEntry, "getTooltip", "(II)Ljava/util/List;", false, missing);
             requireField(configEntry, "parentGroups", "Ljava/util/List;", false, missing);
             requireMethod(configSearch, "getSearch", "()Ljava/lang/String;", false, missing);
+            requireSuperclass(configJumpButton, "dev/emi/emi/screen/widget/SizedButtonWidget", missing);
+            requireExtensibleClass(bindWidget, missing);
+            requireMethod(bindWidget, "<init>",
+                    "(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Supplier;"
+                            + "Ldev/emi/emi/input/EmiBind;)V",
+                    false, missing);
+            requireMethod(bindWidget, "update", "(IIII)V", false, missing);
+            requireMethod(intEdit, "<init>",
+                    "(ILjava/util/function/IntSupplier;Ljava/util/function/IntConsumer;)V", false, missing);
+            requireField(intEdit, "text", "Lnet/minecraft/client/gui/components/EditBox;", false, missing);
+            requireField(intEdit, "up", "Lnet/minecraft/client/gui/components/Button;", false, missing);
+            requireField(intEdit, "down", "Lnet/minecraft/client/gui/components/Button;", false, missing);
+            requireMethod(intEdit, "setPosition", "(II)V", false, missing);
             requireMethod(screenManager, "keyPressed", "(III)Z", true, missing);
+            requireMethod(screenManager, "mouseClicked", "(DDI)Z", true, missing);
             requireMethod(screenManager, "getHoveredStack",
                     "(IIZ)Ldev/emi/emi/api/stack/EmiStackInteraction;", true, missing);
             requireField(screenManager, "lastPlayerInventory",
                     "Ldev/emi/emi/api/recipe/EmiPlayerInventory;", true, missing);
             requireField(screenManager, "lastMouseX", "I", true, missing);
             requireField(screenManager, "lastMouseY", "I", true, missing);
+            requireMethod(renderHelper, "drawTooltip",
+                    "(Lnet/minecraft/client/gui/screens/Screen;Ldev/emi/emi/runtime/EmiDrawContext;Ljava/util/List;II)V",
+                    true, missing);
+            requireMethod(configValue, "value", "()Ljava/lang/String;", false, missing);
+            requireExtensibleClass(emiBind, missing);
+            requireMethod(emiBind, "<init>",
+                    "(Ljava/lang/String;[Ldev/emi/emi/input/EmiBind$ModifiedKey;)V", false, missing);
+            requireField(emiBind, "translationKey", "Ljava/lang/String;", false, missing);
+            requireField(emiBind, "boundKeys", "Ljava/util/List;", false, missing);
+            requireMethod(emiBind, "setBind", "(ILdev/emi/emi/input/EmiBind$ModifiedKey;)V", false, missing);
+            requireMethod(emiBind, "setBinds", "([Ldev/emi/emi/input/EmiBind$ModifiedKey;)V", false, missing);
+            requireMethod(emiBind, "setToDefault", "()V", false, missing);
+            requireMethod(emiBind, "matchesKey", "(II)Z", false, missing);
+            requireMethod(emiBind, "matchesMouse", "(I)Z", false, missing);
+            requireMethod(modifiedKey, "<init>",
+                    "(Lcom/mojang/blaze3d/platform/InputConstants$Key;I)V", false, missing);
+            requireMethod(modifiedKey, "key",
+                    "()Lcom/mojang/blaze3d/platform/InputConstants$Key;", false, missing);
+            requireMethod(modifiedKey, "modifiers", "()I", false, missing);
+            requireMethod(modifiedKey, "modifiersToMatch", "()I", false, missing);
+            requireMethod(modifiedKey, "isUnbound", "()Z", false, missing);
             requireMethod(emiInput, "getCurrentModifiers", "()I", true, missing);
             requireField(emiInput, "SHIFT_MASK", "I", true, missing);
             requireMethod(stackInteraction, "isEmpty", "()Z", false, missing);
@@ -467,8 +563,7 @@ public final class EmiCompatibility {
                     return null;
                 }
                 ClassNode node = new ClassNode();
-                new ClassReader(input).accept(node,
-                        ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+                new ClassReader(input).accept(node, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
                 return node;
             } catch (IOException | RuntimeException exception) {
                 missing.add("class " + internalName + " (unreadable: "
