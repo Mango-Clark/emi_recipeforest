@@ -6,7 +6,6 @@ plugins {
 mixin {
     add(sourceSets.main, "${mod_id}.refmap.json")
     config("${mod_id}.mixins.json")
-    config("${mod_id}.forge.mixins.json")
 }
 
 legacyForge {
@@ -44,12 +43,13 @@ sourceSets.main.resources.srcDir 'src/generated/resources'
 
 dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    compileOnly "dev.emi:emi-forge:${emi_version}"
     modRuntimeOnly "dev.emi:emi-forge:${emi_version}"
 }
 
 jar {
     finalizedBy('reobfJar')
     manifest.attributes([
-            'MixinConfigs': "${mod_id}.mixins.json,${mod_id}.forge.mixins.json"
+            'MixinConfigs': "${mod_id}.mixins.json"
     ])
 }
