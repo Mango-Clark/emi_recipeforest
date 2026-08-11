@@ -18,6 +18,7 @@ import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.SearchBookmark;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.TreeBookmark;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
+import io.github.mango_clark.emirecipeforest.input.ForestBind;
 import io.github.mango_clark.emirecipeforest.screen.BookmarkNameScreen;
 import io.github.mango_clark.emirecipeforest.screen.ForestScreen;
 import net.minecraft.client.Minecraft;
@@ -53,17 +54,34 @@ public abstract class EmiScreenManagerMixin {
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private static void recipeForest$addHoveredRecipeToForest(int keyCode, int scanCode, int modifiers,
             CallbackInfoReturnable<Boolean> cir) {
-        int currentModifiers = EmiInput.getCurrentModifiers();
-        if (keyCode == GLFW.GLFW_KEY_R || keyCode != ForestBookmarks.getForestKeyCode()
-                || (currentModifiers & ~EmiInput.SHIFT_MASK) != 0
-                || EmiApi.getHandledScreen() == null || recipeForest$hasFocusedTextField()) {
+        if (!ForestBind.INSTANCE.matchesKey(keyCode, scanCode) || EmiApi.getHandledScreen() == null
+                || recipeForest$hasFocusedTextField()) {
             return;
         }
 
-        EmiStackInteraction hovered = EmiScreenManager.getHoveredStack(
-                EmiScreenManager.lastMouseX, EmiScreenManager.lastMouseY, true);
-        if (hovered == null || hovered.isEmpty()) {
+        if (recipeForest$addHoveredRecipe(EmiScreenManager.lastMouseX, EmiScreenManager.lastMouseY)) {
+            cir.setReturnValue(true);
+        }
+    }
+
+    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
+    private static void recipeForest$addHoveredRecipeToForest(double mouseX, double mouseY, int button,
+            CallbackInfoReturnable<Boolean> cir) {
+        if (!ForestBind.INSTANCE.matchesMouse(button) || EmiApi.getHandledScreen() == null
+                || recipeForest$hasFocusedTextField()) {
             return;
+        }
+        if (recipeForest$addHoveredRecipe((int) mouseX, (int) mouseY)) {
+            cir.setReturnValue(true);
+        }
+    }
+
+    @Unique
+    private static boolean recipeForest$addHoveredRecipe(int mouseX, int mouseY) {
+        EmiStackInteraction hovered = EmiScreenManager.getHoveredStack(
+                mouseX, mouseY, true);
+        if (hovered == null || hovered.isEmpty()) {
+            return false;
         }
         EmiRecipe recipe = hovered.getRecipeContext();
         if ((recipe == null || !recipe.supportsRecipeTree()) && lastPlayerInventory != null) {
@@ -74,12 +92,12 @@ public abstract class EmiScreenManagerMixin {
             recipe = EmiUtil.getPreferredRecipe(List.copyOf(candidates), lastPlayerInventory, false);
         }
         if (recipe == null || !recipe.supportsRecipeTree()) {
-            return;
+            return false;
         }
 
         ForestManager.add(recipe);
         ForestScreen.open();
-        cir.setReturnValue(true);
+        return true;
     }
 
     @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)

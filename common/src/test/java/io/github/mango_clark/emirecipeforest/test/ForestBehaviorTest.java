@@ -542,7 +542,7 @@ class ForestBehaviorTest {
         addProperty(settings, "resolutionScope", "FUTURE_SCOPE");
         addProperty(settings, "rootLayout", "FUTURE_LAYOUT");
         addProperty(settings, "quantityMode", "FUTURE_MODE");
-        addProperty(settings, "forestKeyCode", "broken");
+        addProperty(settings, "forestBindings", "broken");
         addProperty(settings, "boxEnabled", "broken");
         addProperty(settings, "stacksPerBox", "broken");
         call(bookmarks, "load", types());
@@ -555,6 +555,177 @@ class ForestBehaviorTest {
         assertEquals(70, call(bookmarks, "getForestKeyCode", types()));
         assertTrue((boolean) call(bookmarks, "isBoxEnabled", types()));
         assertEquals(27, call(bookmarks, "getStacksPerBox", types()));
+    }
+
+    @Test
+    void forestBindingsDefaultRoundTripLegacyMigrationAndCorruptionFallback() throws Exception {
+        Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
+        Class<?> binding = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$ForestBinding");
+        Class<?> bindingType = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$BindingType");
+
+        List<?> defaults = (List<?>) call(bookmarks, "getForestBindings", types());
+        assertEquals(2, defaults.size());
+        assertBinding(defaults.get(0), "KEYSYM", "key.keyboard.f", 70, 0);
+        assertBinding(defaults.get(1), "KEYSYM", "key.keyboard.f", 70, 4);
+
+        List<Object> configured = List.of(
+                newBinding(binding, bindingType, "KEYSYM", "key.keyboard.g", 71, 1),
+                newBinding(binding, bindingType, "MOUSE", "key.mouse.left", 0, 4),
+                newBinding(binding, bindingType, "SCANCODE", "scancode.30", 30, 2),
+                newBinding(binding, bindingType, "KEYSYM", "key.keyboard.r", 82, 5));
+        call(bookmarks, "setForestBindings", types(List.class), configured);
+        call(bookmarks, "setRootGridSize", types(int.class, int.class), 6, 4);
+        call(bookmarks, "load", types());
+        assertEquals(configured, call(bookmarks, "getForestBindings", types()));
+        assertEquals(6, call(bookmarks, "getRootGridColumns", types()));
+        assertEquals(4, call(bookmarks, "getRootGridRows", types()));
+
+        call(bookmarks, "resetForestBindings", types());
+        assertEquals(defaults, call(bookmarks, "getForestBindings", types()));
+
+        Path config = gameDirectory.resolve("config/emi_recipeforest.json");
+        Object legacyRoot = jsonObject();
+        addProperty(legacyRoot, "schema", 1);
+        Object legacySettings = jsonObject();
+        addProperty(legacySettings, "forestKeyCode", 72);
+        addProperty(legacySettings, "rootGridColumns", 5);
+        addProperty(legacySettings, "rootGridRows", 3);
+        addProperty(legacySettings, "boxEnabled", false);
+        jsonAdd(legacyRoot, "settings", legacySettings);
+        Object legacySearches = jsonArray();
+        jsonArrayAdd(legacySearches, jsonPrimitive("legacy query"));
+        jsonAdd(legacyRoot, "searches", legacySearches);
+        jsonAdd(legacyRoot, "trees", jsonArray());
+        Files.writeString(config, gsonString(legacyRoot));
+        call(bookmarks, "load", types());
+        List<?> migrated = (List<?>) call(bookmarks, "getForestBindings", types());
+        assertEquals(2, migrated.size());
+        assertBinding(migrated.get(0), "KEYSYM", "key.keyboard.72", 72, 0);
+        assertBinding(migrated.get(1), "KEYSYM", "key.keyboard.72", 72, 4);
+        assertEquals(5, call(bookmarks, "getRootGridColumns", types()));
+        assertEquals(3, call(bookmarks, "getRootGridRows", types()));
+        assertFalse((boolean) call(bookmarks, "isBoxEnabled", types()));
+        List<?> migratedSearches = (List<?>) call(bookmarks, "searches", types());
+        assertEquals(1, migratedSearches.size());
+        assertEquals("legacy query", invoke(migratedSearches.get(0), "query", types()));
+
+        Field gsonValues = runtime.type("com.google.gson.Gson").getDeclaredField("VALUES");
+        gsonValues.setAccessible(true);
+        Object migratedRoot = ((Map<?, ?>) gsonValues.get(null)).get(Files.readString(config));
+        assertEquals(2, invoke(invoke(migratedRoot, "get", types(String.class), "schema"),
+                "getAsInt", types()));
+        Object migratedSettings = invoke(migratedRoot, "getAsJsonObject", types(String.class), "settings");
+        assertFalse((boolean) invoke(migratedSettings, "has", types(String.class), "forestKeyCode"));
+        assertTrue((boolean) invoke(migratedSettings, "has", types(String.class), "forestBindings"));
+        Object migratedBindings = invoke(migratedSettings, "getAsJsonArray", types(String.class), "forestBindings");
+        assertEquals(2, invoke(migratedBindings, "size", types()));
+        assertEquals(5, invoke(invoke(migratedSettings, "get", types(String.class), "rootGridColumns"),
+                "getAsInt", types()));
+        assertFalse((boolean) invoke(invoke(migratedSettings, "get", types(String.class), "boxEnabled"),
+                "getAsBoolean", types()));
+        Object rewrittenSearches = invoke(migratedRoot, "getAsJsonArray", types(String.class), "searches");
+        assertEquals("legacy query", invoke(invoke(rewrittenSearches, "get", types(int.class), 0),
+                "getAsString", types()));
+
+        Object brokenLegacyRoot = jsonObject();
+        addProperty(brokenLegacyRoot, "schema", 1);
+        Object brokenLegacySettings = jsonObject();
+        addProperty(brokenLegacySettings, "forestKeyCode", "broken");
+        jsonAdd(brokenLegacyRoot, "settings", brokenLegacySettings);
+        jsonAdd(brokenLegacyRoot, "searches", jsonArray());
+        jsonAdd(brokenLegacyRoot, "trees", jsonArray());
+        String brokenLegacyJson = gsonString(brokenLegacyRoot);
+        Files.writeString(config, brokenLegacyJson);
+        call(bookmarks, "load", types());
+        assertEquals(brokenLegacyJson, Files.readString(config));
+        assertEquals(defaults, call(bookmarks, "getForestBindings", types()));
+
+        Object corruptRoot = jsonObject();
+        addProperty(corruptRoot, "schema", 2);
+        Object corruptSettings = jsonObject();
+        Object corruptBindings = jsonArray();
+        Object corruptBinding = jsonObject();
+        addProperty(corruptBinding, "type", "FUTURE");
+        addProperty(corruptBinding, "name", "");
+        addProperty(corruptBinding, "value", -1);
+        addProperty(corruptBinding, "modifiers", 64);
+        jsonArrayAdd(corruptBindings, corruptBinding);
+        jsonAdd(corruptSettings, "forestBindings", corruptBindings);
+        jsonAdd(corruptRoot, "settings", corruptSettings);
+        jsonAdd(corruptRoot, "searches", jsonArray());
+        jsonAdd(corruptRoot, "trees", jsonArray());
+        Files.writeString(config, gsonString(corruptRoot));
+        call(bookmarks, "load", types());
+        assertEquals(defaults, call(bookmarks, "getForestBindings", types()));
+    }
+
+    @Test
+    void nativeForestBindMatchesPersistsReloadsResetsAndReportsCollisions() throws Exception {
+        Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
+        Class<?> forestBindType = runtime.type("io.github.mango_clark.emirecipeforest.input.ForestBind");
+        Class<?> modifiedKey = runtime.type("dev.emi.emi.input.EmiBind$ModifiedKey");
+        Class<?> inputType = runtime.type("com.mojang.blaze3d.platform.InputConstants$Type");
+        Class<?> inputKey = runtime.type("com.mojang.blaze3d.platform.InputConstants$Key");
+        Class<?> emiInput = runtime.type("dev.emi.emi.input.EmiInput");
+        Object bind = forestBindType.getField("INSTANCE").get(null);
+
+        call(bookmarks, "resetForestBindings", types());
+        call(forestBindType, bind, "reloadFromBookmarks", types());
+        call(emiInput, "setCurrentModifiers", types(int.class), 0);
+        assertTrue((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), 70, 0));
+        call(emiInput, "setCurrentModifiers", types(int.class), 4);
+        assertTrue((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), 70, 0));
+        call(emiInput, "setCurrentModifiers", types(int.class), 1);
+        assertFalse((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), 70, 0));
+
+        Object keyG = modifiedKey(modifiedKey, inputType, inputKey, "KEYSYM", 71, 1);
+        Object mouseLeft = modifiedKey(modifiedKey, inputType, inputKey, "MOUSE", 0, 4);
+        Object scan30 = modifiedKey(modifiedKey, inputType, inputKey, "SCANCODE", 30, 2);
+        Object keyR = modifiedKey(modifiedKey, inputType, inputKey, "KEYSYM", 82, 5);
+        Object ignoredFifth = modifiedKey(modifiedKey, inputType, inputKey, "KEYSYM", 70, 0);
+        Object array = java.lang.reflect.Array.newInstance(modifiedKey, 5);
+        for (int i = 0; i < 5; i++) {
+            java.lang.reflect.Array.set(array, i, List.of(keyG, mouseLeft, scan30, keyR, ignoredFifth).get(i));
+        }
+        call(forestBindType, bind, "setBinds", types(array.getClass()), array);
+        assertEquals(4, ((List<?>) call(bookmarks, "getForestBindings", types())).size());
+        Path addonConfig = gameDirectory.resolve("config/emi_recipeforest.json");
+        assertTrue(Files.isRegularFile(addonConfig));
+        assertFalse(Files.exists(gameDirectory.resolve("config/emi.json")));
+        assertFalse(Files.exists(gameDirectory.resolve("config/emi.css")));
+
+        call(emiInput, "setCurrentModifiers", types(int.class), 4);
+        assertTrue((boolean) call(forestBindType, bind, "matchesMouse", types(int.class), 0));
+        call(emiInput, "setCurrentModifiers", types(int.class), 2);
+        assertTrue((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), -1, 30));
+
+        String beforeReload = Files.readString(addonConfig);
+        call(forestBindType, bind, "reloadFromBookmarks", types());
+        assertEquals(beforeReload, Files.readString(addonConfig));
+
+        Object keyA = modifiedKey(modifiedKey, inputType, inputKey, "KEYSYM", 65, 0);
+        call(forestBindType, bind, "setBind", types(int.class, modifiedKey), 0, keyA);
+        List<?> collisions = (List<?>) call(forestBindType, bind, "getCollisions", types());
+        assertTrue(collisions.stream().anyMatch(collision -> {
+            try {
+                return "binds.favorite".equals(invoke(collision, "configKey", types()));
+            } catch (Exception exception) {
+                throw new AssertionError(exception);
+            }
+        }));
+        assertFalse(collisions.stream().anyMatch(collision -> {
+            try {
+                return "ui.not-a-bind".equals(invoke(collision, "configKey", types()));
+            } catch (Exception exception) {
+                throw new AssertionError(exception);
+            }
+        }));
+
+        call(forestBindType, bind, "setToDefault", types());
+        List<?> reset = (List<?>) call(bookmarks, "getForestBindings", types());
+        assertEquals(2, reset.size());
+        assertBinding(reset.get(0), "KEYSYM", "key.keyboard.f", 70, 0);
+        assertBinding(reset.get(1), "KEYSYM", "key.keyboard.f", 70, 4);
     }
 
     private static Object newTree(Object recipe) throws Exception {
@@ -614,6 +785,52 @@ class ForestBehaviorTest {
     private static void addProperty(Object json, String name, Object value) throws Exception {
         Class<?> parameter = value instanceof Number ? Number.class : value instanceof Boolean ? Boolean.class : String.class;
         invoke(json, "addProperty", types(String.class, parameter), name, value);
+    }
+
+    private static Object newBinding(Class<?> binding, Class<?> bindingType, String type, String name,
+            int value, int modifiers) throws Exception {
+        return binding.getConstructor(bindingType, String.class, int.class, int.class)
+                .newInstance(enumConstant(bindingType, type), name, value, modifiers);
+    }
+
+    private static Object modifiedKey(Class<?> modifiedKey, Class<?> inputType, Class<?> inputKey,
+            String type, int value, int modifiers) throws Exception {
+        Object keyType = enumConstant(inputType, type);
+        Object key = call(inputType, keyType, "getOrCreate", types(int.class), value);
+        return modifiedKey.getConstructor(inputKey, int.class).newInstance(key, modifiers);
+    }
+
+    private static void assertBinding(Object binding, String type, String name, int value, int modifiers)
+            throws Exception {
+        assertEquals(type, invoke(binding, "type", types()).toString());
+        assertEquals(name, invoke(binding, "name", types()));
+        assertEquals(value, invoke(binding, "value", types()));
+        assertEquals(modifiers, invoke(binding, "modifiers", types()));
+    }
+
+    private static Object jsonObject() throws Exception {
+        return runtime.type("com.google.gson.JsonObject").getConstructor().newInstance();
+    }
+
+    private static Object jsonArray() throws Exception {
+        return runtime.type("com.google.gson.JsonArray").getConstructor().newInstance();
+    }
+
+    private static Object jsonPrimitive(Object value) throws Exception {
+        return runtime.type("com.google.gson.JsonPrimitive").getConstructor(Object.class).newInstance(value);
+    }
+
+    private static void jsonAdd(Object object, String name, Object value) throws Exception {
+        invoke(object, "add", types(String.class, "com.google.gson.JsonElement"), name, value);
+    }
+
+    private static void jsonArrayAdd(Object array, Object value) throws Exception {
+        invoke(array, "add", types("com.google.gson.JsonElement"), value);
+    }
+
+    private static String gsonString(Object value) throws Exception {
+        Object gson = runtime.type("com.google.gson.Gson").getConstructor().newInstance();
+        return (String) invoke(gson, "toJson", types("com.google.gson.JsonElement"), value);
     }
 
     @SuppressWarnings("unchecked")
