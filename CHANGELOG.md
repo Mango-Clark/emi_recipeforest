@@ -17,7 +17,7 @@
 ### Changed
 
 - Left-clicking Recipe Tree now adds the recipe to the Forest silently; holding Shift restores EMI's original Recipe Tree button and behavior.
-- Recipe Forest uses EMI's native Recipe Tree button visuals, and the global Recipe Tree button opens the active Forest first.
+- Recipe Forest uses dedicated RF icon sprites with EMI's native button chrome, and the global Recipe Tree button opens the active Forest first.
 - Recipe Forest settings now use EMI's native config index, row tooltips, numeric and binding controls, and reset confirmation between Cheats and Developer; resolution scope opens EMI's separate option picker.
 - Root layout and quantity display now use EMI-style option pickers, box grouping uses the native boolean control, and grid dimensions use EMI's paired size control under detailed settings.
 - EMI's View Tree shortcut opens the current Forest, while View Stack Tree and the Forest shortcut add recipes silently.
