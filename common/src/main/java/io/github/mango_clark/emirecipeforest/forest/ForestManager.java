@@ -289,8 +289,12 @@ public final class ForestManager {
 
     public static boolean tryApplyPendingResolution(MaterialTree source, EmiIngredient ingredient, EmiRecipe recipe) {
         PendingResolution pending = pendingResolution;
-        if (pending == null || applyingPendingResolution || source == null || source != getSelectedTree()
-                || source != pending.source || !Objects.equals(pending.ingredient, ingredient)) {
+        if (pending == null || applyingPendingResolution) {
+            return false;
+        }
+        if (source == null || source != getSelectedTree() || source != pending.source
+                || !Objects.equals(pending.ingredient, ingredient)) {
+            pendingResolution = null;
             return false;
         }
 

@@ -230,10 +230,15 @@ class ForestBehaviorTest {
         assertFalse((boolean) call(manager, "tryApplyPendingResolution", types(treeType,
                 "dev.emi.emi.api.stack.EmiIngredient", "dev.emi.emi.api.recipe.EmiRecipe"),
                 second, ingredient, resolution));
+        assertFalse((boolean) call(manager, "hasPendingResolution", types()));
+        call(manager, "beginPendingResolution", types("dev.emi.emi.api.stack.EmiIngredient", scope),
+                ingredient, enumConstant(scope, "ALL_ROOTS"));
         assertFalse((boolean) call(manager, "tryApplyPendingResolution", types(treeType,
                 "dev.emi.emi.api.stack.EmiIngredient", "dev.emi.emi.api.recipe.EmiRecipe"),
                 first, mismatch, resolution));
-        assertTrue((boolean) call(manager, "hasPendingResolution", types()));
+        assertFalse((boolean) call(manager, "hasPendingResolution", types()));
+        call(manager, "beginPendingResolution", types("dev.emi.emi.api.stack.EmiIngredient", scope),
+                ingredient, enumConstant(scope, "ALL_ROOTS"));
         assertTrue((boolean) call(manager, "tryApplyPendingResolution", types(treeType,
                 "dev.emi.emi.api.stack.EmiIngredient", "dev.emi.emi.api.recipe.EmiRecipe"),
                 first, ingredient, resolution));

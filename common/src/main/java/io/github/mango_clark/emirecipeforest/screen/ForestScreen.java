@@ -82,6 +82,7 @@ public class ForestScreen extends BoMScreen {
 	private static final int ROOT_LIST_STACKED_CONTROL_HEIGHT = 9;
 	private static final int ROOT_LIST_CONTROL_GAP = 2;
 	private static final int ROOT_LIST_RIGHT_MARGIN = 3;
+	private static final int ROOT_LIST_SCROLLBAR_WIDTH = 4;
 	private static final ResourceLocation RECIPE_FOREST_WIDGETS = EmiPort.id("emi_recipeforest",
 		"textures/gui/widgets.png");
 	private static final ThreadLocal<Boolean> OPENING_FOREST = ThreadLocal.withInitial(() -> false);
@@ -107,6 +108,8 @@ public class ForestScreen extends BoMScreen {
 	private double rootBatchScrollAcc = 0;
 	private int rootBatchScrollIndex = -1;
 	private boolean rootPanelDrag;
+	private boolean rootListScrollbarDrag;
+	private boolean rootGridScrollbarDrag;
 	private boolean altLayout;
 	private MaterialTree lastCalculatedTree;
 	private boolean lastCalculatedForestEmpty;
@@ -415,7 +418,10 @@ public class ForestScreen extends BoMScreen {
 
 		view.popMatrix();
 		RenderSystem.applyModelViewMatrix();
+		context.push();
+		context.matrices().translate(0, 0, 500);
 		renderRootPanel(context, mouseX, mouseY, delta);
+		context.pop();
 
 		if (help.contains(mouseX, mouseY)) {
 			context.setColor(0.5f, 0.6f, 1f, 1f);
@@ -423,6 +429,8 @@ public class ForestScreen extends BoMScreen {
 		context.drawTexture(EmiRenderHelper.WIDGETS, help.x(), help.y(), 0, 200, help.width(), help.height());
 		context.setColor(1f, 1f, 1f, 1f);
 
+		context.push();
+		context.matrices().translate(0, 0, 1000);
 		Hover hover = forest$getHoveredStack(mouseX, mouseY);
 		if (hover != null) {
 			hover.drawTooltip(this, context, mouseX, mouseY);
@@ -438,7 +446,19 @@ public class ForestScreen extends BoMScreen {
 		} else if (help.contains(mouseX, mouseY)) {
 			List<ClientTooltipComponent> list =  EmiTooltip.splitTranslate("tooltip.emi.bom.help");
 			EmiRenderHelper.drawTooltip(this, context, list, help.x(), help.y(), width);
+		} else if (ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST) {
+			int direction = rootListMoveDirectionAt(mouseX, mouseY);
+			if (direction != 0) {
+				String suffix = direction < 0 ? "up" : "down";
+				List<ClientTooltipComponent> list = new java.util.ArrayList<>();
+				list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.move." + suffix));
+				list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.move.shift." + suffix));
+				list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.move.control." + suffix));
+				list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.move.alt." + suffix));
+				EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
+			}
 		}
+		context.pop();
 	}
 
 	private Hover forest$getHoveredStack(int mx, int my) {
@@ -514,6 +534,45 @@ public class ForestScreen extends BoMScreen {
 			context.drawTextWithShadow(EmiPort.literal("›"), nextPage.x() + 4, nextPage.y() + 3,
 				nextPage.contains(mouseX, mouseY) ? 0xFF8099FF : 0xFFFFFFFF);
 		}
+		renderRootGridScrollbar(context, mouseX, mouseY);
+	}
+
+	private int rootGridPageCount() {
+		return Math.max(1, (ForestManager.size() + rootsPerPage() - 1) / rootsPerPage());
+	}
+
+	private void renderRootGridScrollbar(EmiDrawContext context, int mouseX, int mouseY) {
+		if (rootGridPageCount() <= 1) {
+			return;
+		}
+		Bounds track = rootGridScrollbarTrack();
+		Bounds thumb = rootGridScrollbarThumb();
+		context.fill(track.x(), track.y(), track.width(), track.height(), 0xFF202020);
+		context.fill(thumb.x(), thumb.y(), thumb.width(), thumb.height(),
+			thumb.contains(mouseX, mouseY) ? 0xFF8099FF : 0xFF777777);
+	}
+
+	private Bounds rootGridScrollbarTrack() {
+		return new Bounds(rootPanelLeft() + rootPanelWidth() - 7, rootListTop(), ROOT_LIST_SCROLLBAR_WIDTH,
+			Math.max(0, rootListBottom() - rootListTop()));
+	}
+
+	private Bounds rootGridScrollbarThumb() {
+		Bounds track = rootGridScrollbarTrack();
+		int pageCount = rootGridPageCount();
+		int thumbHeight = Math.max(12, track.height() / pageCount);
+		int travel = Math.max(0, track.height() - thumbHeight);
+		int y = track.y() + (pageCount <= 1 ? 0 : travel * page / (pageCount - 1));
+		return new Bounds(track.x(), y, track.width(), thumbHeight);
+	}
+
+	private void setRootGridPageFromMouse(double mouseY) {
+		Bounds track = rootGridScrollbarTrack();
+		Bounds thumb = rootGridScrollbarThumb();
+		int travel = Math.max(1, track.height() - thumb.height());
+		double position = Mth.clamp(mouseY - track.y() - thumb.height() / 2.0, 0, travel);
+		page = Mth.clamp((int) Math.round(position * (rootGridPageCount() - 1) / travel),
+			0, rootGridPageCount() - 1);
 	}
 
 	private void renderGridBatchAmount(EmiDrawContext context, int x, int y, long amount) {
@@ -521,7 +580,7 @@ public class ForestScreen extends BoMScreen {
 		int textWidth = Math.max(1, font.width(text));
 		float textScale = Math.min(1, 14f / textWidth);
 		context.push();
-		context.matrices().translate(x + 17, y + 17, 0);
+		context.matrices().translate(x + 17, y + 17, 200);
 		context.matrices().scale(textScale, textScale, 1);
 		context.drawTextWithShadow(text, -textWidth, -9, 0xFFFFFFFF);
 		context.pop();
@@ -530,7 +589,7 @@ public class ForestScreen extends BoMScreen {
 	private void renderRootList(EmiDrawContext context, int mouseX, int mouseY, float delta) {
 		clampRootListScroll();
 		int left = rootPanelLeft() + 4;
-		int right = rootPanelLeft() + rootPanelWidth() - 4;
+		int right = rootPanelLeft() + rootPanelWidth() - 4 - ROOT_LIST_SCROLLBAR_WIDTH - 2;
 		int top = rootListTop();
 		int bottom = rootListBottom();
 		context.raw().enableScissor(left, top, right, bottom);
@@ -567,6 +626,57 @@ public class ForestScreen extends BoMScreen {
 			renderRootListControl(context, rootListControlBounds(y, 4), "×", true, true, mouseX, mouseY);
 		}
 		context.raw().disableScissor();
+		renderRootListScrollbar(context, mouseX, mouseY);
+	}
+
+	private void renderRootListScrollbar(EmiDrawContext context, int mouseX, int mouseY) {
+		int maxScroll = rootListMaxScroll();
+		if (maxScroll <= 0) {
+			return;
+		}
+		Bounds track = rootListScrollbarTrack();
+		Bounds thumb = rootListScrollbarThumb();
+		context.fill(track.x(), track.y(), track.width(), track.height(), 0xFF202020);
+		context.fill(thumb.x(), thumb.y(), thumb.width(), thumb.height(),
+			thumb.contains(mouseX, mouseY) ? 0xFF8099FF : 0xFF777777);
+	}
+
+	private Bounds rootListScrollbarTrack() {
+		return new Bounds(rootPanelLeft() + rootPanelWidth() - 7, rootListTop(), ROOT_LIST_SCROLLBAR_WIDTH,
+			Math.max(0, rootListBottom() - rootListTop()));
+	}
+
+	private Bounds rootListScrollbarThumb() {
+		Bounds track = rootListScrollbarTrack();
+		int contentHeight = Math.max(1, ForestManager.size() * ROOT_LIST_ROW_HEIGHT);
+		int thumbHeight = Math.max(12, track.height() * track.height() / contentHeight);
+		int travel = Math.max(0, track.height() - thumbHeight);
+		int y = track.y() + (rootListMaxScroll() == 0 ? 0 : travel * rootListScroll / rootListMaxScroll());
+		return new Bounds(track.x(), y, track.width(), thumbHeight);
+	}
+
+	private void setRootListScrollFromMouse(double mouseY) {
+		Bounds track = rootListScrollbarTrack();
+		Bounds thumb = rootListScrollbarThumb();
+		int travel = Math.max(1, track.height() - thumb.height());
+		double position = Mth.clamp(mouseY - track.y() - thumb.height() / 2.0, 0, travel);
+		rootListScroll = (int) Math.round(position * rootListMaxScroll() / travel);
+		clampRootListScroll();
+	}
+
+	private int rootListMoveDirectionAt(int mouseX, int mouseY) {
+		if (!rootPanelContains(mouseX, mouseY) || mouseY < rootListTop() || mouseY >= rootListBottom()) {
+			return 0;
+		}
+		int index = (mouseY - rootListTop() + rootListScroll) / ROOT_LIST_ROW_HEIGHT;
+		if (index < 0 || index >= ForestManager.size()) {
+			return 0;
+		}
+		int rowY = rootListTop() + index * ROOT_LIST_ROW_HEIGHT - rootListScroll;
+		if (rootListControlBounds(rowY, 2).contains(mouseX, mouseY)) {
+			return -1;
+		}
+		return rootListControlBounds(rowY, 3).contains(mouseX, mouseY) ? 1 : 0;
 	}
 
 	private int rootListItemLeft() {
@@ -575,7 +685,7 @@ public class ForestScreen extends BoMScreen {
 
 	private Bounds rootListControlBounds(int rowY, int slot) {
 		int left = rootPanelLeft() + 5;
-		int right = rootPanelLeft() + rootPanelWidth() - 4;
+		int right = rootPanelLeft() + rootPanelWidth() - 4 - ROOT_LIST_SCROLLBAR_WIDTH - 2;
 		int deleteLeft = right - ROOT_LIST_RIGHT_MARGIN - ROOT_LIST_CONTROL_WIDTH;
 		int arrowLeft = deleteLeft - ROOT_LIST_CONTROL_GAP - ROOT_LIST_CONTROL_WIDTH;
 		return switch (slot) {
@@ -874,14 +984,21 @@ public class ForestScreen extends BoMScreen {
 			return true;
 		}
 		if (ForestBookmarks.getRootLayout() != ForestBookmarks.RootLayout.GRID) {
-			if (!rootPanelContains(mouseX, mouseY)) {
-				return false;
+			if (button == 0 && rootListMaxScroll() > 0
+					&& rootListScrollbarTrack().contains((int) mouseX, (int) mouseY)) {
+				rootListScrollbarDrag = true;
+				setRootListScrollFromMouse(mouseY);
+				return true;
 			}
-			if (button == 0 && mouseY >= rootListTop() && mouseY < rootListBottom()) {
+			if ((button == 0 || button == 1) && mouseY >= rootListTop() && mouseY < rootListBottom()) {
 				int index = ((int) mouseY - rootListTop() + rootListScroll) / ROOT_LIST_ROW_HEIGHT;
 				if (index >= 0 && index < ForestManager.size()) {
 					int rowY = rootListTop() + index * ROOT_LIST_ROW_HEIGHT - rootListScroll;
-					if (rootListControlBounds(rowY, 0).contains((int) mouseX, (int) mouseY)) {
+					if (button == 1) {
+						MaterialTree tree = ForestManager.getTrees().get(index);
+						tree.batches = Math.max(1, tree.cost.getIdealBatch(tree.goal, 1, 1));
+						ForestManager.select(index);
+					} else if (rootListControlBounds(rowY, 0).contains((int) mouseX, (int) mouseY)) {
 						adjustRootListBatch(index, -1);
 					} else if (rootListControlBounds(rowY, 1).contains((int) mouseX, (int) mouseY)) {
 						adjustRootListBatch(index, 1);
@@ -907,6 +1024,12 @@ public class ForestScreen extends BoMScreen {
 		if (button == 0 && (page + 1) * rootsPerPage() < ForestManager.size()
 				&& nextPage.contains((int) mouseX, (int) mouseY)) {
 			page++;
+			return true;
+		}
+		if (button == 0 && rootGridPageCount() > 1
+				&& rootGridScrollbarTrack().contains((int) mouseX, (int) mouseY)) {
+			rootGridScrollbarDrag = true;
+			setRootGridPageFromMouse(mouseY);
 			return true;
 		}
 		int columns = rootColumns();
@@ -1073,6 +1196,14 @@ public class ForestScreen extends BoMScreen {
 
 	@Override
 	public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+		if (rootListScrollbarDrag && button == 0) {
+			setRootListScrollFromMouse(mouseY);
+			return true;
+		}
+		if (rootGridScrollbarDrag && button == 0) {
+			setRootGridPageFromMouse(mouseY);
+			return true;
+		}
 		if (rootPanelDrag && (button == 0 || button == 2)) {
 			return true;
 		}
@@ -1087,9 +1218,12 @@ public class ForestScreen extends BoMScreen {
 
 	@Override
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
-		boolean consumed = rootPanelDrag && (button == 0 || button == 2);
+		boolean consumed = rootPanelDrag && (button == 0 || button == 2)
+			|| (rootListScrollbarDrag || rootGridScrollbarDrag) && button == 0;
 		if (button == 0 || button == 2) {
 			rootPanelDrag = false;
+			rootListScrollbarDrag = false;
+			rootGridScrollbarDrag = false;
 		}
 		return consumed || super.mouseReleased(mouseX, mouseY, button);
 	}
