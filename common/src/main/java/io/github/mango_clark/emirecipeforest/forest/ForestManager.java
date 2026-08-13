@@ -43,22 +43,37 @@ public final class ForestManager {
     private ForestManager() {
     }
 
+    /** Returns roots in their canonical order.
+     * @return immutable root view
+     */
     public static List<MaterialTree> getTrees() {
         return Collections.unmodifiableList(TREES);
     }
 
+    /** Returns the live root count.
+     * @return number of roots
+     */
     public static int size() {
         return TREES.size();
     }
 
+    /** Reports whether the forest is empty.
+     * @return whether no roots exist
+     */
     public static boolean isEmpty() {
         return TREES.isEmpty();
     }
 
+    /** Returns the selected index.
+     * @return root index, or {@code -1} when empty
+     */
     public static int getSelectedIndex() {
         return selectedIndex;
     }
 
+    /** Returns the selected live tree.
+     * @return selected tree, or {@code null}
+     */
     public static MaterialTree getSelectedTree() {
         if (selectedIndex < 0 || selectedIndex >= TREES.size()) {
             return null;
@@ -66,21 +81,32 @@ public final class ForestManager {
         return TREES.get(selectedIndex);
     }
 
+    /** Reports whether forest crafting favorites are enabled.
+     * @return crafting-mode state
+     */
     public static boolean isCraftingMode() {
         return craftingMode;
     }
 
+    /**
+     * Sets crafting mode and mirrors it into EMI; an empty forest always disables it.
+     *
+     * @param enabled requested mode
+     */
     public static void setCraftingMode(boolean enabled) {
         craftingMode = enabled && !TREES.isEmpty();
         synchronizeSelectedTree();
     }
 
+    /** Toggles crafting mode subject to the empty-forest invariant. */
     public static void toggleCraftingMode() {
         setCraftingMode(!craftingMode);
     }
 
     /**
      * Replaces the forest with EMI's canonical tree for the supplied goal.
+     *
+     * @param recipe recipe that becomes the only root
      */
     public static void replaceSolo(EmiRecipe recipe) {
         Objects.requireNonNull(recipe, "recipe");
@@ -124,10 +150,19 @@ public final class ForestManager {
         synchronizeSelectedTree();
     }
 
+    /** Reports whether RecipeForest is invoking EMI's goal setter itself.
+     * @return synchronization guard state
+     */
     public static boolean isSynchronizingGoal() {
         return synchronizingGoal;
     }
 
+    /**
+     * Appends and selects a new root, or initializes EMI's canonical tree when empty.
+     *
+     * @param recipe supported root recipe
+     * @return newly selected material tree
+     */
     public static MaterialTree add(EmiRecipe recipe) {
         Objects.requireNonNull(recipe, "recipe");
         cancelPendingResolution();
@@ -143,6 +178,12 @@ public final class ForestManager {
         return tree;
     }
 
+    /**
+     * Selects a root and mirrors it into EMI.
+     *
+     * @param index root index
+     * @return whether the index was valid
+     */
     public static boolean select(int index) {
         if (index < 0 || index >= TREES.size()) {
             return false;
@@ -153,6 +194,12 @@ public final class ForestManager {
         return true;
     }
 
+    /**
+     * Removes a root while preserving a valid selection and EMI mirror state.
+     *
+     * @param index root index
+     * @return removed tree, or {@code null} for an invalid index
+     */
     public static MaterialTree remove(int index) {
         if (index < 0 || index >= TREES.size()) {
             return null;
@@ -174,7 +221,13 @@ public final class ForestManager {
         return removed;
     }
 
-    /** Moves a root while preserving the selected tree by identity. */
+    /**
+     * Moves a root while preserving the selected tree by identity.
+     *
+     * @param fromIndex current root index
+     * @param toIndex destination root index
+     * @return whether both indices were valid
+     */
     public static boolean move(int fromIndex, int toIndex) {
         if (fromIndex < 0 || fromIndex >= TREES.size() || toIndex < 0 || toIndex >= TREES.size()) {
             return false;
@@ -192,6 +245,7 @@ public final class ForestManager {
         return true;
     }
 
+    /** Clears live state and any deferred reload snapshot. */
     public static synchronized void clear() {
         reloadSnapshot = null;
         clearLiveState();
@@ -259,14 +313,34 @@ public final class ForestManager {
         synchronizeSelectedTree();
     }
 
+    /**
+     * Applies a resolution using the persisted default scope.
+     *
+     * @param ingredient ingredient being resolved
+     * @param recipe selected recipe, or {@code null} to clear the resolution
+     */
     public static void addResolution(EmiIngredient ingredient, EmiRecipe recipe) {
         addResolution(ingredient, recipe, ForestBookmarks.getResolutionScope());
     }
 
+    /**
+     * Compatibility overload selecting all roots or only the selected root.
+     *
+     * @param ingredient ingredient being resolved
+     * @param recipe selected recipe, or {@code null}
+     * @param allTrees whether to apply to every root
+     */
     public static void addResolution(EmiIngredient ingredient, EmiRecipe recipe, boolean allTrees) {
         addResolution(ingredient, recipe, allTrees ? ResolutionScope.ALL_ROOTS : ResolutionScope.SELECTED_ROOT);
     }
 
+    /**
+     * Applies a recipe resolution to roots selected by {@code scope}.
+     *
+     * @param ingredient ingredient being resolved
+     * @param recipe selected recipe, or {@code null}
+     * @param scope roots that receive the resolution
+     */
     public static void addResolution(EmiIngredient ingredient, EmiRecipe recipe, ResolutionScope scope) {
         Objects.requireNonNull(ingredient, "ingredient");
         Objects.requireNonNull(scope, "scope");
@@ -280,6 +354,12 @@ public final class ForestManager {
         synchronizeSelectedTree();
     }
 
+    /**
+     * Captures the selected tree and scope before opening EMI's resolution picker.
+     *
+     * @param ingredient ingredient expected from the picker
+     * @param scope roots that should receive a successful selection
+     */
     public static void beginPendingResolution(EmiIngredient ingredient, ResolutionScope scope) {
         Objects.requireNonNull(ingredient, "ingredient");
         Objects.requireNonNull(scope, "scope");
@@ -287,6 +367,15 @@ public final class ForestManager {
         pendingResolution = selected == null ? null : new PendingResolution(ingredient, selected, scope);
     }
 
+    /**
+     * Consumes a pending picker context exactly once.
+     * A mismatched source or ingredient clears stale context without applying it.
+     *
+     * @param source tree that received EMI's resolution
+     * @param ingredient resolved ingredient
+     * @param recipe selected recipe, or {@code null}
+     * @return whether the pending context matched and was applied
+     */
     public static boolean tryApplyPendingResolution(MaterialTree source, EmiIngredient ingredient, EmiRecipe recipe) {
         PendingResolution pending = pendingResolution;
         if (pending == null || applyingPendingResolution) {
@@ -308,14 +397,19 @@ public final class ForestManager {
         return true;
     }
 
+    /** Cancels any pending picker context. */
     public static void cancelPendingResolution() {
         pendingResolution = null;
     }
 
+    /** Reports whether a picker result is expected.
+     * @return pending-resolution state
+     */
     public static boolean hasPendingResolution() {
         return pendingResolution != null;
     }
 
+    /** Recalculates every live root and restores EMI's selected-tree mirror. */
     public static void recalculateAll() {
         for (MaterialTree tree : TREES) {
             tree.recalculate();

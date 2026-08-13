@@ -19,7 +19,9 @@ import net.minecraft.network.chat.Component;
 
 /** Addon-owned native EMI bind; it is deliberately not registered in {@link EmiConfig}. */
 public final class ForestBind extends EmiBind {
+    /** Translation key used by EMI's native bind widget. */
     public static final String TRANSLATION_KEY = "key.emi_recipeforest.add_to_forest";
+    /** Singleton bind synchronized with addon bookmark configuration. */
     public static final ForestBind INSTANCE = new ForestBind();
 
     private boolean initialized;
@@ -29,6 +31,7 @@ public final class ForestBind extends EmiBind {
         initialized = true;
     }
 
+    /** Reloads native EMI bindings without persisting the intermediate mutation. */
     public void reloadFromBookmarks() {
         initialized = false;
         super.setBinds(fromBookmarks());
@@ -53,6 +56,11 @@ public final class ForestBind extends EmiBind {
         reloadFromBookmarks();
     }
 
+    /**
+     * Finds exact input and modifier collisions with EMI's registered binds.
+     *
+     * @return immutable, de-duplicated collision list
+     */
     public List<Collision> getCollisions() {
         LinkedHashSet<Collision> collisions = new LinkedHashSet<>();
         for (Field field : EmiConfig.class.getFields()) {
@@ -144,6 +152,13 @@ public final class ForestBind extends EmiBind {
         return normalized.toArray(ModifiedKey[]::new);
     }
 
+    /**
+     * Conflicting EMI bind metadata for configuration display.
+     *
+     * @param configKey EMI configuration key
+     * @param translationKey EMI bind translation key
+     * @param translatedName localized bind name
+     */
     public record Collision(String configKey, String translationKey, Component translatedName) {
     }
 }

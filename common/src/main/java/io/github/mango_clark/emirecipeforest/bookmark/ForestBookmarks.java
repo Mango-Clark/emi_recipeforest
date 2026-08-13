@@ -42,7 +42,9 @@ import net.minecraft.world.item.Items;
 public final class ForestBookmarks {
     private static final int SCHEMA_VERSION = 2;
     private static final int LEGACY_SCHEMA_VERSION = 1;
+    /** Maximum number of persisted inputs for the Forest action. */
     public static final int MAX_FOREST_BINDINGS = 4;
+    /** EMI modifier mask used by the default {@code Shift+F} binding. */
     public static final int SHIFT_MODIFIER = 4;
     /** GLFW key code for F, retained for migration and source compatibility. */
     public static final int DEFAULT_FOREST_KEY_CODE = 70;
@@ -58,30 +60,52 @@ public final class ForestBookmarks {
     private static boolean boxEnabled = true;
     private static int stacksPerBox = 27;
 
+    /** Controls which roots receive an EMI recipe resolution. */
     public enum ResolutionScope {
+        /** Apply to every live root. */
         ALL_ROOTS,
+        /** Apply only to roots containing the resolved ingredient. */
         MATCHING_ROOTS,
+        /** Apply only to the selected root. */
         SELECTED_ROOT
     }
 
+    /** Available root-panel layouts. */
     public enum RootLayout {
+        /** Vertically scrolling detailed root rows. */
         LIST,
+        /** Paged compact root cells. */
         GRID
     }
 
+    /** Available quantity presentation modes. */
     public enum QuantityMode {
+        /** Box, stack, and item icons. */
         ICON,
+        /** Compact textual quantities. */
         TEXT
     }
 
+    /** Persisted input device categories understood by Minecraft. */
     public enum BindingType {
+        /** Layout-aware key symbol. */
         KEYSYM,
+        /** Physical keyboard scan code. */
         SCANCODE,
+        /** Mouse button. */
         MOUSE
     }
 
-    /** Loader-neutral representation accepted by EMI's ModifiedKey adapter. */
+    /**
+     * Loader-neutral representation accepted by EMI's ModifiedKey adapter.
+     *
+     * @param type input device category
+     * @param name stable input name
+     * @param value GLFW or mouse code
+     * @param modifiers EMI modifier mask
+     */
     public record ForestBinding(BindingType type, String name, int value, int modifiers) {
+        /** Validates and normalizes a serialized binding. */
         public ForestBinding {
             Objects.requireNonNull(type, "type");
             name = normalize(name);
@@ -94,6 +118,9 @@ public final class ForestBookmarks {
     private ForestBookmarks() {
     }
 
+    /** Returns all addon-owned cards in sidebar order.
+     * @return immutable combined search and tree bookmark cards
+     */
     public static List<EmiIngredient> cards() {
         List<EmiIngredient> cards = new ArrayList<>(SEARCHES.size() + TREES.size());
         cards.addAll(SEARCHES);
@@ -101,59 +128,103 @@ public final class ForestBookmarks {
         return List.copyOf(cards);
     }
 
+    /** Returns persisted search cards.
+     * @return immutable search bookmark list
+     */
     public static List<SearchBookmark> searches() {
         return List.copyOf(SEARCHES);
     }
 
+    /** Returns persisted tree cards.
+     * @return immutable tree bookmark list
+     */
     public static List<TreeBookmark> trees() {
         return List.copyOf(TREES);
     }
 
+    /** Returns the root-grid width.
+     * @return configured column count
+     */
     public static int getRootGridColumns() {
         return rootGridColumns;
     }
 
+    /** Returns the root-grid height.
+     * @return configured row count
+     */
     public static int getRootGridRows() {
         return rootGridRows;
     }
 
+    /**
+     * Persists a clamped root-grid size.
+     *
+     * @param columns requested columns
+     * @param rows requested rows
+     */
     public static void setRootGridSize(int columns, int rows) {
         rootGridColumns = clamp(columns, 1, 16);
         rootGridRows = clamp(rows, 1, 8);
         save();
     }
 
+    /** Returns the default resolution scope.
+     * @return persisted resolution scope
+     */
     public static ResolutionScope getResolutionScope() {
         return resolutionScope;
     }
 
+    /** Persists the default resolution scope.
+     * @param scope non-null scope
+     */
     public static void setResolutionScope(ResolutionScope scope) {
         resolutionScope = Objects.requireNonNull(scope, "scope");
         save();
     }
 
+    /** Returns the root-panel layout.
+     * @return persisted root layout
+     */
     public static RootLayout getRootLayout() {
         return rootLayout;
     }
 
+    /** Persists the root-panel layout.
+     * @param layout non-null layout
+     */
     public static void setRootLayout(RootLayout layout) {
         rootLayout = Objects.requireNonNull(layout, "layout");
         save();
     }
 
+    /** Returns the quantity presentation.
+     * @return persisted quantity mode
+     */
     public static QuantityMode getQuantityMode() {
         return quantityMode;
     }
 
+    /** Persists the quantity presentation.
+     * @param mode non-null mode
+     */
     public static void setQuantityMode(QuantityMode mode) {
         quantityMode = Objects.requireNonNull(mode, "mode");
         save();
     }
 
+    /** Returns the Forest action inputs.
+     * @return immutable persisted bindings
+     */
     public static List<ForestBinding> getForestBindings() {
         return List.copyOf(forestBindings);
     }
 
+    /**
+     * Normalizes, limits, and persists Forest input bindings.
+     *
+     * @param bindings bindings to persist
+     */
     public static void setForestBindings(List<ForestBinding> bindings) {
         Objects.requireNonNull(bindings, "bindings");
         List<ForestBinding> validated = new ArrayList<>(Math.min(bindings.size(), MAX_FOREST_BINDINGS));
@@ -166,43 +237,70 @@ public final class ForestBookmarks {
         save();
     }
 
+    /** Restores and persists the default Forest inputs. */
     public static void resetForestBindings() {
         forestBindings = defaultForestBindings();
         save();
     }
 
-    /** Temporary compatibility for callers replaced by the native EMI bind adapter in the next wave. */
+    /**
+     * Temporary compatibility for callers replaced by the native EMI bind adapter in the next wave.
+     *
+     * @return first persisted keysym, or the legacy default
+     */
     @Deprecated
     public static int getForestKeyCode() {
         return forestBindings.stream().filter(binding -> binding.type == BindingType.KEYSYM)
                 .mapToInt(ForestBinding::value).findFirst().orElse(DEFAULT_FOREST_KEY_CODE);
     }
 
-    /** Temporary compatibility for callers replaced by the native EMI bind adapter in the next wave. */
+    /**
+     * Temporary compatibility for callers replaced by the native EMI bind adapter in the next wave.
+     *
+     * @param keyCode legacy GLFW key code
+     */
     @Deprecated
     public static void setForestKeyCode(int keyCode) {
         forestBindings = migratedBindings(keyCode);
         save();
     }
 
+    /** Reports whether box grouping is enabled.
+     * @return whether complete stacks are grouped into boxes
+     */
     public static boolean isBoxEnabled() {
         return boxEnabled;
     }
 
+    /** Persists the box-grouping toggle.
+     * @param enabled whether box grouping is enabled
+     */
     public static void setBoxEnabled(boolean enabled) {
         boxEnabled = enabled;
         save();
     }
 
+    /** Returns the box capacity in stacks.
+     * @return configured stacks per box
+     */
     public static int getStacksPerBox() {
         return stacksPerBox;
     }
 
+    /** Persists a clamped box capacity.
+     * @param stacks requested stacks per box
+     */
     public static void setStacksPerBox(int stacks) {
         stacksPerBox = clamp(stacks, 1, 256);
         save();
     }
 
+    /**
+     * Adds a normalized search bookmark unless an equivalent one already exists.
+     *
+     * @param query search text
+     * @return new or existing bookmark, or {@code null} for an empty query
+     */
     public static SearchBookmark addSearch(String query) {
         String normalized = normalize(query);
         if (normalized.isEmpty()) {
@@ -219,6 +317,12 @@ public final class ForestBookmarks {
         return bookmark;
     }
 
+    /**
+     * Captures and persists the current forest.
+     *
+     * @param name bookmark name
+     * @return captured bookmark, or {@code null} when the forest has no serializable roots
+     */
     public static TreeBookmark addTree(String name) {
         TreeBookmark bookmark = TreeBookmark.capture(normalizeName(name));
         if (bookmark.roots.isEmpty()) {
@@ -229,11 +333,21 @@ public final class ForestBookmarks {
         return bookmark;
     }
 
-    /** Callback target for a screen or mixin that owns the text-entry UI. */
+    /**
+     * Callback target for a screen or mixin that owns the text-entry UI.
+     *
+     * @return callback that captures the current forest under the supplied name
+     */
     public static Consumer<String> saveCurrentTreeCallback() {
         return ForestBookmarks::addTree;
     }
 
+    /**
+     * Removes and persists an addon-owned bookmark card.
+     *
+     * @param card bookmark card
+     * @return whether a card was removed
+     */
     public static boolean remove(EmiIngredient card) {
         boolean removed = SEARCHES.remove(card) | TREES.remove(card);
         if (removed) {
@@ -242,6 +356,13 @@ public final class ForestBookmarks {
         return removed;
     }
 
+    /**
+     * Renames an owned tree bookmark.
+     *
+     * @param bookmark bookmark to rename
+     * @param name replacement name
+     * @return whether the bookmark is still owned
+     */
     public static boolean rename(TreeBookmark bookmark, String name) {
         if (!TREES.contains(bookmark)) {
             return false;
@@ -251,6 +372,12 @@ public final class ForestBookmarks {
         return true;
     }
 
+    /**
+     * Applies a search card or restores a tree card to live state.
+     *
+     * @param card bookmark card
+     * @return whether the card type was supported and restoration succeeded
+     */
     public static boolean apply(EmiIngredient card) {
         if (card instanceof SearchBookmark search) {
             search.apply();
@@ -259,6 +386,7 @@ public final class ForestBookmarks {
         return card instanceof TreeBookmark tree && tree.apply();
     }
 
+    /** Loads addon configuration and bookmark cards, resetting to defaults on missing data. */
     public static void load() {
         SEARCHES.clear();
         TREES.clear();
@@ -329,6 +457,7 @@ public final class ForestBookmarks {
         }
     }
 
+    /** Persists addon configuration and bookmarks with an atomic replacement when supported. */
     public static void save() {
         JsonObject root = new JsonObject();
         root.addProperty("schema", SCHEMA_VERSION);
@@ -496,6 +625,7 @@ public final class ForestBookmarks {
         }
     }
 
+    /** EMI ingredient card that restores a saved search query. */
     public static final class SearchBookmark implements EmiIngredient {
         private static final EmiStack ICON = EmiStack.of(Items.COMPASS);
         private final String query;
@@ -504,10 +634,12 @@ public final class ForestBookmarks {
             this.query = query;
         }
 
+        /** @return saved search text */
         public String query() {
             return query;
         }
 
+        /** Replaces EMI's current search text with this bookmark. */
         public void apply() {
             EmiScreenManager.search.setValue(query);
         }
@@ -556,6 +688,7 @@ public final class ForestBookmarks {
         }
     }
 
+    /** EMI ingredient card containing a reload-safe serialized forest snapshot. */
     public static final class TreeBookmark implements EmiIngredient {
         private static final EmiStack ICON = EmiStack.of(Items.OAK_SAPLING);
         private String name;
@@ -570,10 +703,16 @@ public final class ForestBookmarks {
             this.roots = List.copyOf(roots);
         }
 
+        /** @return current bookmark name */
         public String name() {
             return name;
         }
 
+        /**
+         * Restores every still-valid root from current EMI recipe objects.
+         *
+         * @return whether at least one root was restored
+         */
         public boolean apply() {
             List<PreparedRoot> prepared = new ArrayList<>();
             try {

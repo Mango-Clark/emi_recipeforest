@@ -2,6 +2,7 @@ package io.github.mango_clark.emirecipeforest.platform.services;
 
 import java.util.Optional;
 
+/** Loader-specific metadata queries exposed to loader-neutral common code. */
 public interface IPlatformHelper {
 
     /**

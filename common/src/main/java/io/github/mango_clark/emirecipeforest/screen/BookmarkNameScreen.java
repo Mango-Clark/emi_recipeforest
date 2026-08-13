@@ -27,6 +27,13 @@ public final class BookmarkNameScreen extends Screen {
     private EditBox nameBox;
     private Button confirmButton;
 
+    /**
+     * Creates a name prompt that returns to its parent after submission or cancellation.
+     *
+     * @param parent screen restored on close, possibly {@code null}
+     * @param initialName initial field value, with {@code null} treated as empty
+     * @param callback invoked once with a trimmed, non-empty submitted name
+     */
     public BookmarkNameScreen(Screen parent, String initialName, Consumer<String> callback) {
         super(TITLE);
         this.parent = parent;
@@ -34,21 +41,38 @@ public final class BookmarkNameScreen extends Screen {
         this.callback = Objects.requireNonNull(callback, "callback");
     }
 
+    /** Opens a save prompt over the current screen. */
     public static void openForSave() {
         Minecraft client = Minecraft.getInstance();
         openForSave(client.screen);
     }
 
+    /**
+     * Opens a save prompt over an explicit parent.
+     *
+     * @param parent screen restored when the prompt closes
+     */
     public static void openForSave(Screen parent) {
         Minecraft.getInstance().setScreen(new BookmarkNameScreen(parent, "",
             name -> ForestBookmarks.addTree(name)));
     }
 
+    /**
+     * Opens a rename prompt over the current screen.
+     *
+     * @param bookmark bookmark to rename
+     */
     public static void openForRename(TreeBookmark bookmark) {
         Minecraft client = Minecraft.getInstance();
         openForRename(client.screen, bookmark);
     }
 
+    /**
+     * Opens a rename prompt over an explicit parent.
+     *
+     * @param parent screen restored when the prompt closes
+     * @param bookmark bookmark to rename
+     */
     public static void openForRename(Screen parent, TreeBookmark bookmark) {
         Objects.requireNonNull(bookmark, "bookmark");
         Minecraft.getInstance().setScreen(new BookmarkNameScreen(parent, bookmark.name(),
