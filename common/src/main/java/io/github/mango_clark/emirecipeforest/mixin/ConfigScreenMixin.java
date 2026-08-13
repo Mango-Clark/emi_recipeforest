@@ -3,7 +3,6 @@ package io.github.mango_clark.emirecipeforest.mixin;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
@@ -16,6 +15,8 @@ import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.runtime.EmiDrawContext;
 import dev.emi.emi.screen.ConfigEnumScreen;
 import dev.emi.emi.screen.ConfigScreen;
+import dev.emi.emi.screen.ConfigScreen.Mutator;
+import dev.emi.emi.screen.widget.config.BooleanWidget;
 import dev.emi.emi.screen.widget.config.ConfigEntryWidget;
 import dev.emi.emi.screen.widget.config.ConfigSearch;
 import dev.emi.emi.screen.widget.config.EmiBindWidget;
@@ -24,6 +25,7 @@ import dev.emi.emi.screen.widget.config.GroupNameWidget;
 import dev.emi.emi.screen.widget.config.IntEdit;
 import dev.emi.emi.screen.widget.config.ListWidget;
 import dev.emi.emi.screen.widget.config.ListWidget.Entry;
+import dev.emi.emi.screen.widget.config.SubGroupNameWidget;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.RootLayout;
@@ -125,35 +127,46 @@ public abstract class ConfigScreenMixin extends Screen {
                 Component.translatable("screen.emi_recipeforest.settings.root_layout"), currentSearch,
                 recipeForest$tooltip("screen.emi_recipeforest.settings.root_layout.tooltip"),
                 () -> recipeForest$enumLabel("root_layout", ForestBookmarks.getRootLayout()),
-                () -> ForestBookmarks.setRootLayout(recipeForest$next(ForestBookmarks.getRootLayout()))));
+                this::recipeForest$openRootLayoutScreen));
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.quantity_mode"), currentSearch,
                 recipeForest$tooltip("screen.emi_recipeforest.settings.quantity_mode.tooltip"),
                 () -> recipeForest$enumLabel("quantity_mode", ForestBookmarks.getQuantityMode()),
-                () -> ForestBookmarks.setQuantityMode(recipeForest$next(ForestBookmarks.getQuantityMode()))));
+                this::recipeForest$openQuantityModeScreen));
         settings.add(new RecipeForestBindEntry((ConfigScreen) (Object) this, currentSearch,
                 () -> recipeForest$collisionRevision));
-        settings.add(new RecipeForestValueEntry(
-                Component.translatable("screen.emi_recipeforest.settings.box_enabled"), currentSearch,
+        settings.add(new BooleanWidget(
+                Component.translatable("screen.emi_recipeforest.settings.box_enabled"),
                 recipeForest$tooltip("screen.emi_recipeforest.settings.box_enabled.tooltip"),
-                () -> Component.translatable(ForestBookmarks.isBoxEnabled()
-                        ? "screen.emi_recipeforest.settings.enabled"
-                        : "screen.emi_recipeforest.settings.disabled"),
-                () -> ForestBookmarks.setBoxEnabled(!ForestBookmarks.isBoxEnabled())));
+                currentSearch,
+                ((ConfigScreen) (Object) this).new Mutator<Boolean>() {
+                    @Override
+                    protected Boolean getValue() {
+                        return ForestBookmarks.isBoxEnabled();
+                    }
+
+                    @Override
+                    protected void setValue(Boolean value) {
+                        ForestBookmarks.setBoxEnabled(value);
+                    }
+                }));
         settings.add(new RecipeForestIntEntry(
                 Component.translatable("screen.emi_recipeforest.settings.stacks_per_box", ""), currentSearch));
-        settings.add(new RecipeForestStepperEntry(
+        SubGroupNameWidget details = new SubGroupNameWidget(RECIPE_FOREST$GROUP_ID + ".details",
+                Component.translatable("screen.emi_recipeforest.settings.details"));
+        details.parent = group;
+        RecipeForestStepperEntry columns = new RecipeForestStepperEntry(
                 Component.translatable("screen.emi_recipeforest.settings.columns", ""), currentSearch,
                 recipeForest$tooltip("screen.emi_recipeforest.settings.columns.tooltip"),
                 ForestBookmarks::getRootGridColumns,
                 value -> ForestBookmarks.setRootGridSize(value, ForestBookmarks.getRootGridRows()),
-                1, 16, () -> ForestBookmarks.getRootLayout() == RootLayout.GRID));
-        settings.add(new RecipeForestStepperEntry(
+                1, 16);
+        RecipeForestStepperEntry rows = new RecipeForestStepperEntry(
                 Component.translatable("screen.emi_recipeforest.settings.rows", ""), currentSearch,
                 recipeForest$tooltip("screen.emi_recipeforest.settings.rows.tooltip"),
                 ForestBookmarks::getRootGridRows,
                 value -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns(), value),
-                1, 8, () -> ForestBookmarks.getRootLayout() == RootLayout.GRID));
+                1, 8);
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.title"), currentSearch,
                 recipeForest$tooltip("screen.emi_recipeforest.settings.reset.tooltip"),
@@ -161,12 +174,22 @@ public abstract class ConfigScreenMixin extends Screen {
                         .withStyle(ChatFormatting.RED),
                 this::recipeForest$confirmResetSettings));
 
-        List<Entry> inserted = new ArrayList<>(settings.size() + 1);
+        List<Entry> inserted = new ArrayList<>(settings.size() + 4);
         inserted.add(group);
         list.addEntry(group);
         for (ConfigEntryWidget setting : settings) {
             group.children.add(setting);
             setting.parentGroups.add(group);
+            inserted.add(setting);
+            list.addEntry(setting);
+        }
+        inserted.add(details);
+        list.addEntry(details);
+        for (ConfigEntryWidget setting : List.of(columns, rows)) {
+            group.children.add(setting);
+            details.children.add(setting);
+            setting.parentGroups.add(group);
+            setting.parentGroups.add(details);
             inserted.add(setting);
             list.addEntry(setting);
         }
@@ -209,6 +232,29 @@ public abstract class ConfigScreenMixin extends Screen {
         }
         minecraft.setScreen(new ConfigEnumScreen<>((ConfigScreen) (Object) this, entries,
                 ForestBookmarks::setResolutionScope));
+    }
+
+    @Unique
+    private void recipeForest$openRootLayoutScreen() {
+        recipeForest$openEnumScreen("root_layout", RootLayout.values(), ForestBookmarks::setRootLayout);
+    }
+
+    @Unique
+    private void recipeForest$openQuantityModeScreen() {
+        recipeForest$openEnumScreen("quantity_mode", ForestBookmarks.QuantityMode.values(),
+                ForestBookmarks::setQuantityMode);
+    }
+
+    @Unique
+    private <E extends Enum<E>> void recipeForest$openEnumScreen(String setting, E[] values,
+            java.util.function.Consumer<E> setter) {
+        List<ConfigEnumScreen.Entry<E>> entries = new ArrayList<>();
+        for (E value : values) {
+            String key = "screen.emi_recipeforest.settings." + setting + "."
+                    + value.name().toLowerCase(Locale.ROOT);
+            entries.add(new ConfigEnumScreen.Entry<>(value, Component.translatable(key), List.of()));
+        }
+        minecraft.setScreen(new ConfigEnumScreen<>((ConfigScreen) (Object) this, entries, setter));
     }
 
     @Unique
@@ -271,12 +317,6 @@ public abstract class ConfigScreenMixin extends Screen {
             ForestBind.INSTANCE.setBinds(ForestBind.INSTANCE.boundKeys.stream()
                     .filter(key -> !key.isUnbound()).toArray(EmiBind.ModifiedKey[]::new));
         }
-    }
-
-    @Unique
-    private static <E extends Enum<E>> E recipeForest$next(E value) {
-        E[] values = value.getDeclaringClass().getEnumConstants();
-        return values[(value.ordinal() + 1) % values.length];
     }
 
     @Unique
@@ -458,20 +498,18 @@ public abstract class ConfigScreenMixin extends Screen {
         private final IntConsumer setter;
         private final int minimum;
         private final int maximum;
-        private final BooleanSupplier visible;
         private final Button decrease;
         private final Button display;
         private final Button increase;
 
         private RecipeForestStepperEntry(Component name, Supplier<String> currentSearch,
                 List<ClientTooltipComponent> tooltip, IntSupplier value,
-                IntConsumer setter, int minimum, int maximum, BooleanSupplier visible) {
+                IntConsumer setter, int minimum, int maximum) {
             super(name, tooltip, currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
             this.value = value;
             this.setter = setter;
             this.minimum = minimum;
             this.maximum = maximum;
-            this.visible = visible;
             decrease = Button.builder(Component.translatable("screen.emi_recipeforest.settings.columns.decrease"),
                     ignored -> setter.accept(value.getAsInt() - 1))
                     .bounds(0, 0, 20, RECIPE_FOREST$BUTTON_HEIGHT).build();
@@ -497,11 +535,6 @@ public abstract class ConfigScreenMixin extends Screen {
             increase.setX(left + 130);
             increase.setY(y);
             increase.active = current < maximum;
-        }
-
-        @Override
-        public int getHeight() {
-            return visible.getAsBoolean() ? super.getHeight() : 0;
         }
     }
 }

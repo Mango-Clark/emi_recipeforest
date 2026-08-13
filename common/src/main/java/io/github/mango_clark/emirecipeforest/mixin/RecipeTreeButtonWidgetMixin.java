@@ -52,7 +52,7 @@ public abstract class RecipeTreeButtonWidgetMixin extends RecipeButtonWidget {
         ((RecipeTreeButtonWidget) (Object) this).playButtonSound();
         if (EmiInput.isShiftDown()) {
             ForestManager.replaceSolo(recipeForest$recipe);
-            EmiApi.viewRecipeTree();
+            ForestScreen.open();
         } else {
             ForestManager.add(recipeForest$recipe);
             ForestScreen.open();

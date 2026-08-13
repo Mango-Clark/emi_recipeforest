@@ -32,6 +32,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -96,8 +97,25 @@ public abstract class EmiScreenManagerMixin {
         }
 
         ForestManager.add(recipe);
-        ForestScreen.open();
         return true;
+    }
+
+    @Redirect(method = "keyPressed", at = @At(value = "INVOKE",
+            target = "Ldev/emi/emi/api/EmiApi;viewRecipeTree()V"))
+    private static void recipeForest$openForestForViewTreeKey() {
+        ForestScreen.open();
+    }
+
+    @Redirect(method = "stackInteraction", at = @At(value = "INVOKE",
+            target = "Ldev/emi/emi/bom/BoM;setGoal(Ldev/emi/emi/api/recipe/EmiRecipe;)V"))
+    private static void recipeForest$addViewStackTreeGoal(EmiRecipe recipe) {
+        ForestManager.add(recipe);
+    }
+
+    @Redirect(method = "stackInteraction", at = @At(value = "INVOKE",
+            target = "Ldev/emi/emi/api/EmiApi;viewRecipeTree()V"))
+    private static void recipeForest$suppressViewStackTreeScreen() {
+        // View Stack Tree adds to the Forest silently; View Tree opens the current Forest.
     }
 
     @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)
