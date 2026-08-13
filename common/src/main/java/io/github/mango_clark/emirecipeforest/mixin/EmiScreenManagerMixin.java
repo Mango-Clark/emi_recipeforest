@@ -3,6 +3,7 @@ package io.github.mango_clark.emirecipeforest.mixin;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+import dev.emi.emi.EmiPort;
 import dev.emi.emi.EmiUtil;
 import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.recipe.EmiPlayerInventory;
@@ -26,6 +27,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -38,6 +40,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = EmiScreenManager.class, remap = false)
 public abstract class EmiScreenManagerMixin {
+    @Unique
+    private static final ResourceLocation RECIPE_FOREST$BUTTONS = EmiPort.id("emi_recipeforest",
+            "textures/gui/buttons.png");
+
     @Shadow
     private static EmiPlayerInventory lastPlayerInventory;
 
@@ -206,13 +212,7 @@ public abstract class EmiScreenManagerMixin {
         private RecipeForestTreeButton(int x, int y, net.minecraft.client.gui.components.Button.OnPress action) {
             super(x, y, 20, 20, 184, 0, () -> true, action,
                     List.of(Component.translatable("tooltip.emi_recipeforest.recipe_tree")));
-        }
-
-        @Override
-        public void renderWidget(net.minecraft.client.gui.GuiGraphics graphics, int mouseX, int mouseY,
-                float delta) {
-            super.renderWidget(graphics, mouseX, mouseY, delta);
-            graphics.fill(getX() + 5, getY() + 5, getX() + 15, getY() + 15, 0xff0000ff);
+            texture = RECIPE_FOREST$BUTTONS;
         }
     }
 }
