@@ -870,15 +870,22 @@ public class ForestScreen extends BoMScreen {
 		return false;
 	}
 
-	private boolean applyPreferredResolution(Hover hover) {
+	private boolean applyPreferredResolution(Hover hover, ResolutionScope forestScope) {
 		EmiRecipe recipe = hover.node == null ? null : hover.node.recipe;
 		if (recipe != null && recipe.supportsRecipeTree()) {
-			ForestManager.addResolution(hover.stack, recipe, ForestBookmarks.getResolutionScope());
+			applyResolution(hover, hover.stack, recipe, forestScope);
 			return true;
 		}
 		return getAutoResolutions(hover,
-			(ingredient, preferred) -> ForestManager.addResolution(ingredient, preferred,
-				ForestBookmarks.getResolutionScope()));
+			(ingredient, preferred) -> applyResolution(hover, ingredient, preferred, forestScope));
+	}
+
+	private void applyResolution(Hover hover, EmiIngredient ingredient, EmiRecipe recipe, ResolutionScope forestScope) {
+		if (forestScope == null && hover.node != null && BoM.tree != null) {
+			BoM.tree.addResolution(ingredient, recipe);
+		} else if (forestScope != null) {
+			ForestManager.addResolution(ingredient, recipe, forestScope);
+		}
 	}
 
 	private void openResolutionPicker(Hover hover, ResolutionScope pendingScope) {
@@ -922,8 +929,7 @@ public class ForestScreen extends BoMScreen {
 			if (button == 1 && hover.node != null && hover.node.recipe != null) {
 				if (EmiInput.isShiftDown()) {
 					ForestManager.cancelPendingResolution();
-					ForestManager.addResolution(hover.node.ingredient, null,
-						ForestBookmarks.getResolutionScope());
+					applyResolution(hover, hover.node.ingredient, null, null);
 				} else if (!(hover.node.recipe instanceof EmiResolutionRecipe)) {
 					if (hover.node.state == FoldState.EXPANDED) {
 						hover.node.state = FoldState.COLLAPSED;
@@ -937,10 +943,11 @@ public class ForestScreen extends BoMScreen {
 			if (hover.stack != null) {
 				if (EmiInput.isShiftDown() && button == 0) {
 					ForestManager.cancelPendingResolution();
-					if (applyPreferredResolution(hover)) {
+					ResolutionScope forestScope = hover.node == null ? ForestBookmarks.getResolutionScope() : null;
+					if (applyPreferredResolution(hover, forestScope)) {
 						recalculateTree();
 					} else {
-						openResolutionPicker(hover, ForestBookmarks.getResolutionScope());
+						openResolutionPicker(hover, forestScope);
 					}
 					return true;
 				} else {
@@ -1057,8 +1064,12 @@ public class ForestScreen extends BoMScreen {
 		}
 		int withinX = localX % ROOT_CELL_SIZE;
 		int withinY = localY % ROOT_CELL_SIZE;
-		if (button == 1 || (button == 0 && withinX >= 12 && withinY < 6)) {
+		if (button == 0 && withinX >= 12 && withinY < 6) {
 			ForestManager.remove(index);
+		} else if (button == 1) {
+			MaterialTree tree = ForestManager.getTrees().get(index);
+			tree.batches = Math.max(1, tree.cost.getIdealBatch(tree.goal, 1, 1));
+			ForestManager.select(index);
 		} else if (button == 0) {
 			ForestManager.select(index);
 		} else {

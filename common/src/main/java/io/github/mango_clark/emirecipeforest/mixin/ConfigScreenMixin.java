@@ -3,7 +3,6 @@ package io.github.mango_clark.emirecipeforest.mixin;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -11,6 +10,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 
 import dev.emi.emi.EmiPort;
 import dev.emi.emi.EmiRenderHelper;
+import dev.emi.emi.config.IntGroup;
 import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.runtime.EmiDrawContext;
 import dev.emi.emi.screen.ConfigEnumScreen;
@@ -23,6 +23,7 @@ import dev.emi.emi.screen.widget.config.EmiBindWidget;
 import dev.emi.emi.screen.widget.config.ConfigJumpButton;
 import dev.emi.emi.screen.widget.config.GroupNameWidget;
 import dev.emi.emi.screen.widget.config.IntEdit;
+import dev.emi.emi.screen.widget.config.IntGroupWidget;
 import dev.emi.emi.screen.widget.config.ListWidget;
 import dev.emi.emi.screen.widget.config.ListWidget.Entry;
 import dev.emi.emi.screen.widget.config.SubGroupNameWidget;
@@ -30,6 +31,7 @@ import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.RootLayout;
 import io.github.mango_clark.emirecipeforest.input.ForestBind;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -155,18 +157,27 @@ public abstract class ConfigScreenMixin extends Screen {
         SubGroupNameWidget details = new SubGroupNameWidget(RECIPE_FOREST$GROUP_ID + ".details",
                 Component.translatable("screen.emi_recipeforest.settings.details"));
         details.parent = group;
-        RecipeForestStepperEntry columns = new RecipeForestStepperEntry(
-                Component.translatable("screen.emi_recipeforest.settings.columns", ""), currentSearch,
-                recipeForest$tooltip("screen.emi_recipeforest.settings.columns.tooltip"),
-                ForestBookmarks::getRootGridColumns,
-                value -> ForestBookmarks.setRootGridSize(value, ForestBookmarks.getRootGridRows()),
-                1, 16);
-        RecipeForestStepperEntry rows = new RecipeForestStepperEntry(
-                Component.translatable("screen.emi_recipeforest.settings.rows", ""), currentSearch,
-                recipeForest$tooltip("screen.emi_recipeforest.settings.rows.tooltip"),
-                ForestBookmarks::getRootGridRows,
-                value -> ForestBookmarks.setRootGridSize(ForestBookmarks.getRootGridColumns(), value),
-                1, 8);
+        IntGroupWidget gridSize = new IntGroupWidget(
+                Component.translatable("screen.emi_recipeforest.settings.grid_size"),
+                recipeForest$tooltip("screen.emi_recipeforest.settings.grid_size.tooltip"), currentSearch,
+                ((ConfigScreen) (Object) this).new Mutator<IntGroup>() {
+                    @Override
+                    protected IntGroup getValue() {
+                        return new IntGroup("screen.emi_recipeforest.settings.grid_size.",
+                                List.of("columns", "rows"),
+                                IntArrayList.of(ForestBookmarks.getRootGridColumns(),
+                                        ForestBookmarks.getRootGridRows()));
+                    }
+
+                    @Override
+                    protected void setValue(IntGroup value) {
+                        int columns = Math.max(1, Math.min(16, value.values.getInt(0)));
+                        int rows = Math.max(1, Math.min(8, value.values.getInt(1)));
+                        value.values.set(0, columns);
+                        value.values.set(1, rows);
+                        ForestBookmarks.setRootGridSize(columns, rows);
+                    }
+                });
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.title"), currentSearch,
                 recipeForest$tooltip("screen.emi_recipeforest.settings.reset.tooltip"),
@@ -185,7 +196,7 @@ public abstract class ConfigScreenMixin extends Screen {
         }
         inserted.add(details);
         list.addEntry(details);
-        for (ConfigEntryWidget setting : List.of(columns, rows)) {
+        for (ConfigEntryWidget setting : List.of(gridSize)) {
             group.children.add(setting);
             details.children.add(setting);
             setting.parentGroups.add(group);
@@ -492,49 +503,4 @@ public abstract class ConfigScreenMixin extends Screen {
         }
     }
 
-    @Unique
-    private static final class RecipeForestStepperEntry extends ConfigEntryWidget {
-        private final IntSupplier value;
-        private final IntConsumer setter;
-        private final int minimum;
-        private final int maximum;
-        private final Button decrease;
-        private final Button display;
-        private final Button increase;
-
-        private RecipeForestStepperEntry(Component name, Supplier<String> currentSearch,
-                List<ClientTooltipComponent> tooltip, IntSupplier value,
-                IntConsumer setter, int minimum, int maximum) {
-            super(name, tooltip, currentSearch, RECIPE_FOREST$BUTTON_HEIGHT);
-            this.value = value;
-            this.setter = setter;
-            this.minimum = minimum;
-            this.maximum = maximum;
-            decrease = Button.builder(Component.translatable("screen.emi_recipeforest.settings.columns.decrease"),
-                    ignored -> setter.accept(value.getAsInt() - 1))
-                    .bounds(0, 0, 20, RECIPE_FOREST$BUTTON_HEIGHT).build();
-            display = Button.builder(Component.empty(), ignored -> {
-            }).bounds(0, 0, 106, RECIPE_FOREST$BUTTON_HEIGHT).build();
-            display.active = false;
-            increase = Button.builder(Component.translatable("screen.emi_recipeforest.settings.columns.increase"),
-                    ignored -> setter.accept(value.getAsInt() + 1))
-                    .bounds(0, 0, 20, RECIPE_FOREST$BUTTON_HEIGHT).build();
-            setChildren(List.of(decrease, display, increase));
-        }
-
-        @Override
-        public void update(int y, int x, int width, int height) {
-            int current = value.getAsInt();
-            int left = x + width - RECIPE_FOREST$CONTROL_WIDTH;
-            decrease.setX(left);
-            decrease.setY(y);
-            decrease.active = current > minimum;
-            display.setX(left + 22);
-            display.setY(y);
-            display.setMessage(Component.literal(Integer.toString(current)));
-            increase.setX(left + 130);
-            increase.setY(y);
-            increase.active = current < maximum;
-        }
-    }
 }
