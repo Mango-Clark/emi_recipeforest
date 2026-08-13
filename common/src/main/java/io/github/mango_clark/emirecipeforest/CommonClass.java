@@ -9,6 +9,11 @@ public final class CommonClass {
     private CommonClass() {
     }
 
+    /**
+     * Performs idempotent common initialization and rejects incompatible EMI runtimes.
+     *
+     * @throws IllegalStateException when the installed EMI version or bytecode contract is unsupported
+     */
     public static synchronized void init() {
         if (initialized) {
             return;

@@ -100,7 +100,7 @@ public abstract class EmiScreenManagerMixin {
         return true;
     }
 
-    @Redirect(method = "keyPressed", at = @At(value = "INVOKE",
+    @Redirect(method = "genericInteraction", at = @At(value = "INVOKE",
             target = "Ldev/emi/emi/api/EmiApi;viewRecipeTree()V"))
     private static void recipeForest$openForestForViewTreeKey() {
         ForestScreen.open();

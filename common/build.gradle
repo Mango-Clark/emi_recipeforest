@@ -166,6 +166,7 @@ def emiCompatibilityContracts = [
         ],
         'dev.emi.emi.screen.EmiScreenManager': [
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public static'],
+                [token: ' genericInteraction(', descriptor: '(Ljava/util/function/Function;)Z', access: 'public static'],
                 [token: ' mouseClicked(', descriptor: '(DDI)Z', access: 'public static'],
                 [token: ' mouseReleased(', descriptor: '(DDI)Z', access: 'public static'],
                 [token: ' mouseDragged(', descriptor: '(DDIDD)Z', access: 'public static'],
@@ -324,6 +325,36 @@ tasks.register('verifyEmiCompatibilityMatrix') {
             if (newBoMScreenCount != 2) {
                 throw new GradleException("EMI ${version}: EmiApi.viewRecipeTree()V expected exactly two NEW "
                         + "dev/emi/emi/screen/BoMScreen sites, found ${newBoMScreenCount}")
+            }
+            def screenManagerBytecode = new ByteArrayOutputStream()
+            def screenManagerResult = project.exec {
+                commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-c', '-s',
+                        'dev.emi.emi.screen.EmiScreenManager'
+                standardOutput = screenManagerBytecode
+                errorOutput = screenManagerBytecode
+                ignoreExitValue = true
+            }
+            if (screenManagerResult.exitValue != 0) {
+                throw new GradleException("EMI ${version}: unable to inspect EmiScreenManager bytecode: "
+                        + screenManagerBytecode.toString('UTF-8'))
+            }
+            def screenManagerLines = screenManagerBytecode.toString('UTF-8').readLines()
+            def genericStart = screenManagerLines.findIndexOf {
+                it.trim() == 'public static boolean genericInteraction(java.util.function.Function<dev.emi.emi.input.EmiBind, java.lang.Boolean>);'
+            }
+            def genericEnd = genericStart < 0 ? -1 : ((genericStart + 1)..<screenManagerLines.size()).find {
+                def line = screenManagerLines[it]
+                line.startsWith('  ') && !line.startsWith('    ') && line.trim().endsWith(';')
+            }
+            if (genericEnd == null || genericEnd < 0) {
+                genericEnd = screenManagerLines.size()
+            }
+            def viewTreeCallCount = genericStart < 0 ? 0 : screenManagerLines.subList(genericStart, genericEnd).count {
+                it.contains('invokestatic') && it.contains('// Method dev/emi/emi/api/EmiApi.viewRecipeTree:()V')
+            }
+            if (viewTreeCallCount != 1) {
+                throw new GradleException("EMI ${version}: EmiScreenManager.genericInteraction(Function)Z expected "
+                        + "exactly one EmiApi.viewRecipeTree()V call, found ${viewTreeCallCount}")
             }
             def configBytecode = new ByteArrayOutputStream()
             def configResult = project.exec {

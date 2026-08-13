@@ -20,14 +20,31 @@ public final class ForestCosts {
     private final TreeCost total = new TreeCost();
     private final TreeCost progress = new TreeCost();
 
+    /** Creates an empty cost accumulator. */
+    public ForestCosts() {
+    }
+
+    /** Returns aggregate cost without applying player inventory.
+     * @return aggregate cost
+     */
     public TreeCost getTotal() {
         return total;
     }
 
+    /** Returns remaining cost after consuming the supplied player inventory.
+     * @return remaining cost
+     */
     public TreeCost getProgress() {
         return progress;
     }
 
+    /**
+     * Recalculates total and remaining costs for the ordered roots.
+     * Inventory and recipe remainders are carried from each root into the next.
+     *
+     * @param trees ordered forest roots
+     * @param inventory player inventory, or {@code null} for an empty inventory
+     */
     public void calculate(List<MaterialTree> trees, EmiPlayerInventory inventory) {
         Accumulator progressAccumulator = new Accumulator(progress);
         progressAccumulator.clear();
@@ -52,6 +69,13 @@ public final class ForestCosts {
         }
     }
 
+    /**
+     * Creates and calculates a fresh accumulator.
+     *
+     * @param trees ordered forest roots
+     * @param inventory player inventory, or {@code null}
+     * @return calculated forest costs
+     */
     public static ForestCosts calculateNew(List<MaterialTree> trees, EmiPlayerInventory inventory) {
         ForestCosts costs = new ForestCosts();
         costs.calculate(trees, inventory);

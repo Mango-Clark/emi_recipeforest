@@ -26,6 +26,12 @@ public final class ForestFavorites {
     private ForestFavorites() {
     }
 
+    /**
+     * Rebuilds EMI's synthetic crafting favorites from the live forest.
+     * Clears the synthetic list and disables crafting mode when no actionable recipe remains.
+     *
+     * @param inventory current EMI player inventory
+     */
     public static void updateSynthetic(EmiPlayerInventory inventory) {
         List<MaterialTree> trees = ForestManager.getTrees();
         EmiFavorites.syntheticFavorites.clear();

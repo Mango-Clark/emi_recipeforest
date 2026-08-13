@@ -67,6 +67,7 @@ import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay.DisplayMode;
 
+/** Multi-root replacement for EMI's recipe tree screen. */
 public class ForestScreen extends BoMScreen {
 	private static final int NODE_WIDTH = 30;
 	private static final int NODE_HORIZONTAL_SPACING = 8;
@@ -114,7 +115,12 @@ public class ForestScreen extends BoMScreen {
 	private MaterialTree lastCalculatedTree;
 	private boolean lastCalculatedForestEmpty;
 
-	public ForestScreen(AbstractContainerScreen<?> old) {
+    /**
+     * Creates a forest screen with EMI's handled-screen return context.
+     *
+     * @param old handled screen restored on close
+     */
+    public ForestScreen(AbstractContainerScreen<?> old) {
 		super(old);
 	}
 
@@ -128,7 +134,11 @@ public class ForestScreen extends BoMScreen {
 		}
 	}
 
-	/** Used by the EMI screen factory mixin during the synchronous {@link #open()} call. */
+	/**
+	 * Reports the synchronous factory override requested by {@link #open()}.
+	 *
+	 * @return whether EMI should construct a forest screen
+	 */
 	public static boolean isForestOpenRequested() {
 		return OPENING_FOREST.get();
 	}

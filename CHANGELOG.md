@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- EMI's View Tree shortcut now redirects from its actual generic-input call site, preventing inventory-open Mixin crashes on Fabric and NeoForge.
 - Amount labels render after item icons so stack counts and remainders are no longer obscured.
 - Forest panel contents, root quantities, and tooltips render in stable front-to-back order.
 - Selecting a recipe from an aggregate total-cost item now applies the resolution to the configured Forest scope.

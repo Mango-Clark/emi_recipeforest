@@ -6,24 +6,29 @@ import io.github.mango_clark.emirecipeforest.platform.services.IPlatformHelper;
 import java.util.Optional;
 import java.util.ServiceLoader;
 
-// Service loaders are a built-in Java feature that allow us to locate implementations of an interface that vary from one
-// environment to another. In the context of MultiLoader we use this feature to access a mock API in the common code that
-// is swapped out for the platform specific implementation at runtime.
+/** Resolves loader-specific services without exposing loader APIs to common code. */
 public class Services {
-
-    // In this example we provide a platform helper which provides information about what platform the mod is running on.
-    // For example this can be used to check if the code is running on Forge vs Fabric, or to ask the modloader if another
-    // mod is loaded.
+    /** Platform service supplied by the active loader module. */
     public static final IPlatformHelper PLATFORM = load(IPlatformHelper.class);
 
+    /**
+     * Returns the active loader's declared version for a loaded mod.
+     *
+     * @param modId mod identifier to query
+     * @return declared version, or empty when the mod is not loaded
+     */
     public static Optional<String> getModVersion(String modId) {
         return PLATFORM.getModVersion(modId);
     }
 
-    // This code is used to load a service for the current environment. Your implementation of the service must be defined
-    // manually by including a text file in META-INF/services named with the fully qualified class name of the service.
-    // Inside the file you should write the fully qualified class name of the implementation to load for the platform. For
-    // example our file on Forge points to ForgePlatformHelper while Fabric points to FabricPlatformHelper.
+    /**
+     * Loads the first implementation declared through {@link ServiceLoader}.
+     *
+     * @param clazz service interface
+     * @param <T> service type
+     * @return loader-specific implementation
+     * @throws NullPointerException when no provider is declared
+     */
     public static <T> T load(Class<T> clazz) {
         final T loadedService = ServiceLoader.load(clazz).findFirst().orElseThrow(() -> new NullPointerException("Failed to load service for " + clazz.getName()));
         Constants.LOG.debug("Loaded {} for service {}", loadedService, clazz);
