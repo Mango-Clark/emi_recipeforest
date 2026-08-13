@@ -118,9 +118,17 @@ def emiCompatibilityContracts = [
                 [token: ' down;', descriptor: 'Lnet/minecraft/client/gui/components/Button;', access: 'public final'],
                 [token: ' setPosition(', descriptor: '(II)V', access: 'public']
         ],
+        'dev.emi.emi.config.IntGroup': [
+                [token: 'IntGroup(', descriptor: '(Ljava/lang/String;Ljava/util/List;Lit/unimi/dsi/fastutil/ints/IntList;)V', access: 'public'],
+                [token: ' values;', descriptor: 'Lit/unimi/dsi/fastutil/ints/IntList;', access: 'public final']
+        ],
+        'dev.emi.emi.screen.widget.config.IntGroupWidget': [
+                [token: 'IntGroupWidget(', descriptor: '(Lnet/minecraft/network/chat/Component;Ljava/util/List;Ljava/util/function/Supplier;Ldev/emi/emi/screen/ConfigScreen$Mutator;)V', access: 'public']
+        ],
         'dev.emi.emi.screen.RecipeScreen': [
                 [token: 'RecipeScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;Ljava/util/Map;)V', access: 'public'],
                 [token: ' onClose(', descriptor: '()V', access: 'public'],
+                [token: ' keyPressed(', descriptor: '(III)Z', access: 'public'],
                 [token: ' resolve;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static']
         ],
         'dev.emi.emi.api.EmiApi': [
@@ -355,6 +363,38 @@ tasks.register('verifyEmiCompatibilityMatrix') {
             if (viewTreeCallCount != 1) {
                 throw new GradleException("EMI ${version}: EmiScreenManager.genericInteraction(Function)Z expected "
                         + "exactly one EmiApi.viewRecipeTree()V call, found ${viewTreeCallCount}")
+            }
+            def recipeScreenBytecode = new ByteArrayOutputStream()
+            def recipeScreenResult = project.exec {
+                commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-c', '-s',
+                        'dev.emi.emi.screen.RecipeScreen'
+                standardOutput = recipeScreenBytecode
+                errorOutput = recipeScreenBytecode
+                ignoreExitValue = true
+            }
+            if (recipeScreenResult.exitValue != 0) {
+                throw new GradleException("EMI ${version}: unable to inspect RecipeScreen bytecode: "
+                        + recipeScreenBytecode.toString('UTF-8'))
+            }
+            def recipeScreenLines = recipeScreenBytecode.toString('UTF-8').readLines()
+            def keyPressedStart = recipeScreenLines.findIndexOf {
+                it.trim() == 'public boolean keyPressed(int, int, int);'
+            }
+            def keyPressedEnd = keyPressedStart < 0 ? -1 : ((keyPressedStart + 1)..<recipeScreenLines.size()).find {
+                def line = recipeScreenLines[it]
+                line.startsWith('  ') && !line.startsWith('    ') && line.trim().endsWith(';')
+            }
+            if (keyPressedEnd == null || keyPressedEnd < 0) {
+                keyPressedEnd = recipeScreenLines.size()
+            }
+            def recipeInteractionCount = keyPressedStart < 0 ? 0
+                    : recipeScreenLines.subList(keyPressedStart, keyPressedEnd).count {
+                it.contains('invokestatic')
+                        && it.contains('// Method dev/emi/emi/screen/EmiScreenManager.recipeInteraction:')
+            }
+            if (recipeInteractionCount != 1) {
+                throw new GradleException("EMI ${version}: RecipeScreen.keyPressed(III)Z expected exactly one "
+                        + "EmiScreenManager.recipeInteraction call, found ${recipeInteractionCount}")
             }
             def configBytecode = new ByteArrayOutputStream()
             def configResult = project.exec {

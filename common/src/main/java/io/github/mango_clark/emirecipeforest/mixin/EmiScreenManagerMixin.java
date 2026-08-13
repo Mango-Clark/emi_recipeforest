@@ -43,13 +43,13 @@ public abstract class EmiScreenManagerMixin {
 
     @Inject(method = "<clinit>", at = @At("TAIL"))
     private static void recipeForest$replaceTreeButtonCallback(CallbackInfo ci) {
-        EmiScreenManager.tree = new SizedButtonWidget(0, 0, 20, 20, 184, 0, () -> true, button -> {
+        EmiScreenManager.tree = new RecipeForestTreeButton(0, 0, button -> {
             if (ForestManager.isEmpty()) {
                 EmiApi.viewRecipeTree();
             } else {
                 ForestScreen.open();
             }
-        }, List.of(Component.translatable("tooltip.emi.recipe_tree")));
+        });
     }
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
@@ -199,5 +199,20 @@ public abstract class EmiScreenManagerMixin {
     private static void recipeForest$clearDragState() {
         EmiScreenManager.pressedStack = EmiStack.EMPTY;
         EmiScreenManager.draggedStack = EmiStack.EMPTY;
+    }
+
+    @Unique
+    private static final class RecipeForestTreeButton extends SizedButtonWidget {
+        private RecipeForestTreeButton(int x, int y, net.minecraft.client.gui.components.Button.OnPress action) {
+            super(x, y, 20, 20, 184, 0, () -> true, action,
+                    List.of(Component.translatable("tooltip.emi_recipeforest.recipe_tree")));
+        }
+
+        @Override
+        public void renderWidget(net.minecraft.client.gui.GuiGraphics graphics, int mouseX, int mouseY,
+                float delta) {
+            super.renderWidget(graphics, mouseX, mouseY, delta);
+            graphics.fill(getX() + 5, getY() + 5, getX() + 15, getY() + 15, 0xff0000ff);
+        }
     }
 }

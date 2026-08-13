@@ -16,10 +16,10 @@
 
 ### Changed
 
-- Left-clicking Recipe Tree now adds the recipe to the Forest; Shift-clicking replaces the Forest and opens a Solo tree.
+- Left-clicking Recipe Tree now adds the recipe to the Forest silently; holding Shift restores EMI's original Recipe Tree button and behavior.
 - Recipe Forest uses EMI's native Recipe Tree button visuals, and the global Recipe Tree button opens the active Forest first.
 - Recipe Forest settings now use EMI's native config index, row tooltips, numeric and binding controls, and reset confirmation between Cheats and Developer; resolution scope opens EMI's separate option picker.
-- Root layout and quantity display now use EMI-style option pickers, box grouping uses the native boolean control, and grid dimensions live under detailed settings.
+- Root layout and quantity display now use EMI-style option pickers, box grouping uses the native boolean control, and grid dimensions use EMI's paired size control under detailed settings.
 - EMI's View Tree shortcut opens the current Forest, while View Stack Tree and the Forest shortcut add recipes silently.
 - Forest shortcuts now support up to four key, scan-code, or mouse bindings stored only in RecipeForest's versioned settings. Existing single-key settings migrate automatically, conflicts show an RF override indicator without changing EMI's config, and the original EMI shortcut still runs when no recipe can be added.
 - Alt quantity columns expand only while Alt is held; quantity and Recipe Forest icons share a unified atlas, and grid batches use compact, cell-fitting digits.
@@ -28,6 +28,8 @@
 ### Fixed
 
 - EMI's View Tree shortcut now redirects from its actual generic-input call site, preventing inventory-open Mixin crashes on Fabric and NeoForge.
+- Shift resolution actions now preserve whether they originated from a Recipe Tree or the aggregate Forest, and the Forest shortcut works over recipes in EMI's Recipe Screen.
+- Grid root right-click now matches the list's minimal-leftover behavior instead of deleting the root.
 - Amount labels render after item icons so stack counts and remainders are no longer obscured.
 - Forest panel contents, root quantities, and tooltips render in stable front-to-back order.
 - Selecting a recipe from an aggregate total-cost item now applies the resolution to the configured Forest scope.

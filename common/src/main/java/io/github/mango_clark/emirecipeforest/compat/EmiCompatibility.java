@@ -138,7 +138,11 @@ public final class EmiCompatibility {
                         "(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;Ljava/util/Map;)V",
                         false, missing);
                 requireMethod(targetClass, "onClose", "()V", false, missing);
+                requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
                 requireField(targetClass, "resolve", "Ldev/emi/emi/api/stack/EmiIngredient;", true, missing);
+                requireMethodInvocations(targetClass, "keyPressed", "(III)Z", Opcodes.INVOKESTATIC,
+                        "dev/emi/emi/screen/EmiScreenManager", "recipeInteraction",
+                        "(Ldev/emi/emi/api/recipe/EmiRecipe;Ljava/util/function/Function;)Z", 1, missing);
             }
             case "dev.emi.emi.api.EmiApi" -> {
                 requireMethod(targetClass, "viewRecipeTree", "()V", true, missing);
@@ -427,6 +431,8 @@ public final class EmiCompatibility {
             ClassNode configJumpButton = readClass("dev/emi/emi/screen/widget/config/ConfigJumpButton", missing);
             ClassNode bindWidget = readClass("dev/emi/emi/screen/widget/config/EmiBindWidget", missing);
             ClassNode intEdit = readClass("dev/emi/emi/screen/widget/config/IntEdit", missing);
+            ClassNode intGroup = readClass("dev/emi/emi/config/IntGroup", missing);
+            ClassNode intGroupWidget = readClass("dev/emi/emi/screen/widget/config/IntGroupWidget", missing);
             ClassNode screenManager = readClass("dev/emi/emi/screen/EmiScreenManager", missing);
             ClassNode renderHelper = readClass("dev/emi/emi/EmiRenderHelper", missing);
             ClassNode emiConfig = readClass("dev/emi/emi/config/EmiConfig", missing);
@@ -538,8 +544,17 @@ public final class EmiCompatibility {
             requireField(intEdit, "up", "Lnet/minecraft/client/gui/components/Button;", false, missing);
             requireField(intEdit, "down", "Lnet/minecraft/client/gui/components/Button;", false, missing);
             requireMethod(intEdit, "setPosition", "(II)V", false, missing);
+            requireMethod(intGroup, "<init>",
+                    "(Ljava/lang/String;Ljava/util/List;Lit/unimi/dsi/fastutil/ints/IntList;)V", false, missing);
+            requireField(intGroup, "values", "Lit/unimi/dsi/fastutil/ints/IntList;", false, missing);
+            requireMethod(intGroupWidget, "<init>",
+                    "(Lnet/minecraft/network/chat/Component;Ljava/util/List;Ljava/util/function/Supplier;"
+                            + "Ldev/emi/emi/screen/ConfigScreen$Mutator;)V",
+                    false, missing);
             requireMethod(screenManager, "keyPressed", "(III)Z", true, missing);
             requireMethod(screenManager, "genericInteraction", "(Ljava/util/function/Function;)Z", true, missing);
+            requireMethod(screenManager, "recipeInteraction",
+                    "(Ldev/emi/emi/api/recipe/EmiRecipe;Ljava/util/function/Function;)Z", true, missing);
             requireMethod(screenManager, "mouseClicked", "(DDI)Z", true, missing);
             requireMethod(screenManager, "getHoveredStack",
                     "(IIZ)Ldev/emi/emi/api/stack/EmiStackInteraction;", true, missing);
@@ -549,6 +564,10 @@ public final class EmiCompatibility {
             requireField(screenManager, "lastMouseY", "I", true, missing);
             requireMethodInvocations(screenManager, "genericInteraction", "(Ljava/util/function/Function;)Z",
                     Opcodes.INVOKESTATIC, "dev/emi/emi/api/EmiApi", "viewRecipeTree", "()V", 1, missing);
+            requireMethod(recipeScreen, "keyPressed", "(III)Z", false, missing);
+            requireMethodInvocations(recipeScreen, "keyPressed", "(III)Z", Opcodes.INVOKESTATIC,
+                    "dev/emi/emi/screen/EmiScreenManager", "recipeInteraction",
+                    "(Ldev/emi/emi/api/recipe/EmiRecipe;Ljava/util/function/Function;)Z", 1, missing);
             requireMethod(renderHelper, "drawTooltip",
                     "(Lnet/minecraft/client/gui/screens/Screen;Ldev/emi/emi/runtime/EmiDrawContext;Ljava/util/List;II)V",
                     true, missing);
