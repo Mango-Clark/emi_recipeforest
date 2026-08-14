@@ -305,7 +305,13 @@ public class ForestScreen extends BoMScreen {
 	}
 
 	private int rootPanelHeight() {
-		return Math.max(0, height - ROOT_PANEL_MARGIN * 2);
+		int available = Math.max(0, height - ROOT_PANEL_MARGIN * 2);
+		if (ForestBookmarks.getRootLayout() != ForestBookmarks.RootLayout.LIST) {
+			return available;
+		}
+		long requested = (long) ROOT_PANEL_HEADER_HEIGHT + ROOT_PANEL_FOOTER_HEIGHT
+			+ (long) ForestBookmarks.getListLength() * ROOT_LIST_ROW_HEIGHT;
+		return (int) Math.min(available, requested);
 	}
 
 	private boolean rootPanelHasContent() {
@@ -628,9 +634,13 @@ public class ForestScreen extends BoMScreen {
 					~(EmiIngredient.RENDER_AMOUNT | EmiIngredient.RENDER_REMAINDER));
 				int textLeft = itemLeft + 18;
 				int textWidth = Math.max(0, rootListControlBounds(y, 2).x() - 2 - textLeft);
-				String batchesText = "×" + tree.batches;
-				String clipped = font.plainSubstrByWidth(batchesText, textWidth);
-				context.drawTextWithShadow(EmiPort.literal(clipped), textLeft, y + 8, 0xFFFFFFFF);
+				if (EmiInput.isAltDown()) {
+					renderRootListQuantity(context, tree, textLeft, y + 4, textWidth);
+				} else {
+					String batchesText = "×" + tree.batches;
+					String clipped = font.plainSubstrByWidth(batchesText, textWidth);
+					context.drawTextWithShadow(EmiPort.literal(clipped), textLeft, y + 8, 0xFFFFFFFF);
+				}
 			}
 
 			renderRootListControl(context, rootListControlBounds(y, 0), "−", canDecrementRootListBatch(tree),
@@ -643,6 +653,35 @@ public class ForestScreen extends BoMScreen {
 		}
 		context.raw().disableScissor();
 		renderRootListScrollbar(context, mouseX, mouseY);
+	}
+
+	private void renderRootListQuantity(EmiDrawContext context, MaterialTree tree, int x, int y, int width) {
+		if (width <= 0) {
+			return;
+		}
+		context.raw().enableScissor(x, y, x + width, y + 16);
+		try {
+			long amount = saturatedMultiply(tree.batches, Math.max(0, tree.goal.amount));
+			if (ForestBookmarks.getQuantityMode() == ForestBookmarks.QuantityMode.ICON) {
+				QuantityDisplay display = quantityDisplay(tree.goal.ingredient, amount);
+				if (display != null) {
+					renderQuantityIcons(context, x, y, display);
+					return;
+				}
+			}
+			String text = amountText(tree.goal.ingredient, amount, true).getString();
+			context.drawTextWithShadow(EmiPort.literal(font.plainSubstrByWidth(text, width)), x, y + 4,
+				0xFFFFFFFF);
+		} finally {
+			context.raw().disableScissor();
+		}
+	}
+
+	private static long saturatedMultiply(long left, long right) {
+		if (left <= 0 || right <= 0) {
+			return 0;
+		}
+		return left > Long.MAX_VALUE / right ? Long.MAX_VALUE : left * right;
 	}
 
 	private void renderRootListScrollbar(EmiDrawContext context, int mouseX, int mouseY) {

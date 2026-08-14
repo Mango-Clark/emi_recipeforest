@@ -42,10 +42,10 @@ import net.minecraft.world.item.Items;
 public final class ForestBookmarks {
     private static final int SCHEMA_VERSION = 2;
     private static final int LEGACY_SCHEMA_VERSION = 1;
-    /** Default number of live Forest roots. */
-    public static final int DEFAULT_MAX_ROOTS = 64;
-    /** Upper bound accepted by the maximum-root setting. */
-    public static final int MAX_ROOTS_LIMIT = 256;
+    /** Default maximum number of visible rows in the Forest list. */
+    public static final int DEFAULT_LIST_LENGTH = 64;
+    /** Upper bound accepted by the list-length setting. */
+    public static final int LIST_LENGTH_LIMIT = 256;
     /** Maximum number of persisted inputs for the Forest action. */
     public static final int MAX_FOREST_BINDINGS = 4;
     /** EMI modifier mask used by the default {@code Shift+F} binding. */
@@ -57,7 +57,7 @@ public final class ForestBookmarks {
     private static final List<TreeBookmark> TREES = new ArrayList<>();
     private static int rootGridColumns = 8;
     private static int rootGridRows = 2;
-    private static int maxRoots = DEFAULT_MAX_ROOTS;
+    private static int listLength = DEFAULT_LIST_LENGTH;
     private static ResolutionScope resolutionScope = ResolutionScope.ALL_ROOTS;
     private static RootLayout rootLayout = RootLayout.LIST;
     private static QuantityMode quantityMode = QuantityMode.ICON;
@@ -173,18 +173,18 @@ public final class ForestBookmarks {
         save();
     }
 
-    /** Returns the configured maximum number of live Forest roots.
-     * @return maximum root count
+    /** Returns the configured maximum number of visible Forest list rows.
+     * @return maximum visible list rows
      */
-    public static int getMaxRoots() {
-        return maxRoots;
+    public static int getListLength() {
+        return listLength;
     }
 
-    /** Persists a bounded maximum root count.
-     * @param roots requested maximum root count
+    /** Persists a bounded maximum number of visible Forest list rows.
+     * @param rows requested maximum visible row count
      */
-    public static void setMaxRoots(int roots) {
-        maxRoots = clamp(Math.max(roots, ForestManager.size()), 1, MAX_ROOTS_LIMIT);
+    public static void setListLength(int rows) {
+        listLength = clamp(rows, 1, LIST_LENGTH_LIMIT);
         save();
     }
 
@@ -412,7 +412,7 @@ public final class ForestBookmarks {
         TREES.clear();
         rootGridColumns = 8;
         rootGridRows = 2;
-        maxRoots = DEFAULT_MAX_ROOTS;
+        listLength = DEFAULT_LIST_LENGTH;
         resolutionScope = ResolutionScope.ALL_ROOTS;
         rootLayout = RootLayout.LIST;
         quantityMode = QuantityMode.ICON;
@@ -435,7 +435,9 @@ public final class ForestBookmarks {
                 JsonObject settings = root.getAsJsonObject("settings");
                 rootGridColumns = clamp(intValue(settings, "rootGridColumns", 8), 1, 16);
                 rootGridRows = clamp(intValue(settings, "rootGridRows", 2), 1, 8);
-                maxRoots = clamp(intValue(settings, "maxRoots", DEFAULT_MAX_ROOTS), 1, MAX_ROOTS_LIMIT);
+                // maxRoots was the pre-fix name for this UI setting. Keep it as a read-only fallback.
+                listLength = clamp(intValue(settings, "listLength",
+                        intValue(settings, "maxRoots", DEFAULT_LIST_LENGTH)), 1, LIST_LENGTH_LIMIT);
                 resolutionScope = enumValue(settings, "resolutionScope", ResolutionScope.class,
                         ResolutionScope.ALL_ROOTS);
                 rootLayout = enumValue(settings, "rootLayout", RootLayout.class, RootLayout.LIST);
@@ -486,7 +488,7 @@ public final class ForestBookmarks {
         JsonObject settings = new JsonObject();
         settings.addProperty("rootGridColumns", rootGridColumns);
         settings.addProperty("rootGridRows", rootGridRows);
-        settings.addProperty("maxRoots", maxRoots);
+        settings.addProperty("listLength", listLength);
         settings.addProperty("resolutionScope", resolutionScope.name());
         settings.addProperty("rootLayout", rootLayout.name());
         settings.addProperty("quantityMode", quantityMode.name());
@@ -765,7 +767,7 @@ public final class ForestBookmarks {
 
             // No live state is touched until every recoverable root has been fully prepared.
             ForestManager.clear();
-            for (PreparedRoot preparedRoot : prepared.subList(0, Math.min(prepared.size(), getMaxRoots()))) {
+            for (PreparedRoot preparedRoot : prepared) {
                 MaterialTree tree = ForestManager.add(preparedRoot.recipe);
                 tree.batches = preparedRoot.tree.batches;
                 tree.resolutions.clear();
