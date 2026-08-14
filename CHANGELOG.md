@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- Hovering EMI Help in the Forest screen no longer crashes when RecipeForest appends its guidance.
 - List Length now limits only the visible LIST viewport instead of blocking additional roots in either LIST or GRID.
 - EMI's View Tree shortcut now redirects from its actual generic-input call site, preventing inventory-open Mixin crashes on Fabric and NeoForge.
 - Shift resolution actions now preserve whether they originated from a Recipe Tree or the aggregate Forest, and the Forest shortcut works over recipes in EMI's Recipe Screen.
