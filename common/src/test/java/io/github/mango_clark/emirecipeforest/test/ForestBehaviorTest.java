@@ -73,6 +73,24 @@ class ForestBehaviorTest {
     }
 
     @Test
+    void configuredRootLimitRejectsAdditionalRootsAndPersists() throws Exception {
+        Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
+        call(bookmarks, "setMaxRoots", types(int.class), 2);
+
+        Object recipe = runtime.recipe("test:limited", runtime.stack("limited", 1), List.of());
+        assertNotSame(null, call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
+        assertNotSame(null, call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
+        assertNull(call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
+        assertEquals(2, call(manager, "size", types()));
+
+        call(bookmarks, "setMaxRoots", types(int.class), 1);
+        assertEquals(2, call(bookmarks, "getMaxRoots", types()));
+
+        call(bookmarks, "load", types());
+        assertEquals(2, call(bookmarks, "getMaxRoots", types()));
+    }
+
+    @Test
     void movingRootsPreservesOrderAndSelectedTreeIdentity() throws Exception {
         Object first = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"),
                 runtime.recipe("test:first", runtime.stack("first", 1), List.of()));
@@ -518,6 +536,7 @@ class ForestBehaviorTest {
         assertEquals(70, call(bookmarks, "getForestKeyCode", types()));
         assertTrue((boolean) call(bookmarks, "isBoxEnabled", types()));
         assertEquals(27, call(bookmarks, "getStacksPerBox", types()));
+        assertEquals(64, call(bookmarks, "getMaxRoots", types()));
 
         call(bookmarks, "setResolutionScope", types(resolutionScope), enumConstant(resolutionScope, "MATCHING_ROOTS"));
         call(bookmarks, "setRootLayout", types(rootLayout), enumConstant(rootLayout, "GRID"));
@@ -525,6 +544,7 @@ class ForestBehaviorTest {
         call(bookmarks, "setForestKeyCode", types(int.class), 71);
         call(bookmarks, "setBoxEnabled", types(boolean.class), false);
         call(bookmarks, "setStacksPerBox", types(int.class), 999);
+        call(bookmarks, "setMaxRoots", types(int.class), 999);
         call(bookmarks, "load", types());
 
         assertEquals("MATCHING_ROOTS", call(bookmarks, "getResolutionScope", types()).toString());
@@ -533,6 +553,7 @@ class ForestBehaviorTest {
         assertEquals(71, call(bookmarks, "getForestKeyCode", types()));
         assertFalse((boolean) call(bookmarks, "isBoxEnabled", types()));
         assertEquals(256, call(bookmarks, "getStacksPerBox", types()));
+        assertEquals(256, call(bookmarks, "getMaxRoots", types()));
 
         call(bookmarks, "setStacksPerBox", types(int.class), -1);
         call(bookmarks, "load", types());
@@ -550,6 +571,7 @@ class ForestBehaviorTest {
         addProperty(settings, "forestBindings", "broken");
         addProperty(settings, "boxEnabled", "broken");
         addProperty(settings, "stacksPerBox", "broken");
+        addProperty(settings, "maxRoots", "broken");
         call(bookmarks, "load", types());
 
         assertEquals(4, call(bookmarks, "getRootGridColumns", types()));
@@ -560,6 +582,7 @@ class ForestBehaviorTest {
         assertEquals(70, call(bookmarks, "getForestKeyCode", types()));
         assertTrue((boolean) call(bookmarks, "isBoxEnabled", types()));
         assertEquals(27, call(bookmarks, "getStacksPerBox", types()));
+        assertEquals(64, call(bookmarks, "getMaxRoots", types()));
     }
 
     @Test
@@ -569,9 +592,8 @@ class ForestBehaviorTest {
         Class<?> bindingType = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$BindingType");
 
         List<?> defaults = (List<?>) call(bookmarks, "getForestBindings", types());
-        assertEquals(2, defaults.size());
+        assertEquals(1, defaults.size());
         assertBinding(defaults.get(0), "KEYSYM", "key.keyboard.f", 70, 0);
-        assertBinding(defaults.get(1), "KEYSYM", "key.keyboard.f", 70, 4);
 
         List<Object> configured = List.of(
                 newBinding(binding, bindingType, "KEYSYM", "key.keyboard.g", 71, 1),
@@ -679,7 +701,7 @@ class ForestBehaviorTest {
         call(emiInput, "setCurrentModifiers", types(int.class), 0);
         assertTrue((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), 70, 0));
         call(emiInput, "setCurrentModifiers", types(int.class), 4);
-        assertTrue((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), 70, 0));
+        assertFalse((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), 70, 0));
         call(emiInput, "setCurrentModifiers", types(int.class), 1);
         assertFalse((boolean) call(forestBindType, bind, "matchesKey", types(int.class, int.class), 70, 0));
 
@@ -728,9 +750,8 @@ class ForestBehaviorTest {
 
         call(forestBindType, bind, "setToDefault", types());
         List<?> reset = (List<?>) call(bookmarks, "getForestBindings", types());
-        assertEquals(2, reset.size());
+        assertEquals(1, reset.size());
         assertBinding(reset.get(0), "KEYSYM", "key.keyboard.f", 70, 0);
-        assertBinding(reset.get(1), "KEYSYM", "key.keyboard.f", 70, 4);
     }
 
     private static Object newTree(Object recipe) throws Exception {

@@ -42,6 +42,10 @@ import net.minecraft.world.item.Items;
 public final class ForestBookmarks {
     private static final int SCHEMA_VERSION = 2;
     private static final int LEGACY_SCHEMA_VERSION = 1;
+    /** Default number of live Forest roots. */
+    public static final int DEFAULT_MAX_ROOTS = 64;
+    /** Upper bound accepted by the maximum-root setting. */
+    public static final int MAX_ROOTS_LIMIT = 256;
     /** Maximum number of persisted inputs for the Forest action. */
     public static final int MAX_FOREST_BINDINGS = 4;
     /** EMI modifier mask used by the default {@code Shift+F} binding. */
@@ -53,6 +57,7 @@ public final class ForestBookmarks {
     private static final List<TreeBookmark> TREES = new ArrayList<>();
     private static int rootGridColumns = 8;
     private static int rootGridRows = 2;
+    private static int maxRoots = DEFAULT_MAX_ROOTS;
     private static ResolutionScope resolutionScope = ResolutionScope.ALL_ROOTS;
     private static RootLayout rootLayout = RootLayout.LIST;
     private static QuantityMode quantityMode = QuantityMode.ICON;
@@ -165,6 +170,21 @@ public final class ForestBookmarks {
     public static void setRootGridSize(int columns, int rows) {
         rootGridColumns = clamp(columns, 1, 16);
         rootGridRows = clamp(rows, 1, 8);
+        save();
+    }
+
+    /** Returns the configured maximum number of live Forest roots.
+     * @return maximum root count
+     */
+    public static int getMaxRoots() {
+        return maxRoots;
+    }
+
+    /** Persists a bounded maximum root count.
+     * @param roots requested maximum root count
+     */
+    public static void setMaxRoots(int roots) {
+        maxRoots = clamp(Math.max(roots, ForestManager.size()), 1, MAX_ROOTS_LIMIT);
         save();
     }
 
@@ -392,6 +412,7 @@ public final class ForestBookmarks {
         TREES.clear();
         rootGridColumns = 8;
         rootGridRows = 2;
+        maxRoots = DEFAULT_MAX_ROOTS;
         resolutionScope = ResolutionScope.ALL_ROOTS;
         rootLayout = RootLayout.LIST;
         quantityMode = QuantityMode.ICON;
@@ -414,6 +435,7 @@ public final class ForestBookmarks {
                 JsonObject settings = root.getAsJsonObject("settings");
                 rootGridColumns = clamp(intValue(settings, "rootGridColumns", 8), 1, 16);
                 rootGridRows = clamp(intValue(settings, "rootGridRows", 2), 1, 8);
+                maxRoots = clamp(intValue(settings, "maxRoots", DEFAULT_MAX_ROOTS), 1, MAX_ROOTS_LIMIT);
                 resolutionScope = enumValue(settings, "resolutionScope", ResolutionScope.class,
                         ResolutionScope.ALL_ROOTS);
                 rootLayout = enumValue(settings, "rootLayout", RootLayout.class, RootLayout.LIST);
@@ -464,6 +486,7 @@ public final class ForestBookmarks {
         JsonObject settings = new JsonObject();
         settings.addProperty("rootGridColumns", rootGridColumns);
         settings.addProperty("rootGridRows", rootGridRows);
+        settings.addProperty("maxRoots", maxRoots);
         settings.addProperty("resolutionScope", resolutionScope.name());
         settings.addProperty("rootLayout", rootLayout.name());
         settings.addProperty("quantityMode", quantityMode.name());
@@ -525,7 +548,9 @@ public final class ForestBookmarks {
 
     private static List<ForestBinding> readForestBindings(JsonObject settings) {
         if (!settings.has("forestBindings")) {
-            return migratedBindings(intValue(settings, "forestKeyCode", DEFAULT_FOREST_KEY_CODE));
+            return validLegacyKeyCode(settings)
+                    ? migratedBindings(intValue(settings, "forestKeyCode", DEFAULT_FOREST_KEY_CODE))
+                    : defaultForestBindings();
         }
         if (!settings.get("forestBindings").isJsonArray()) {
             return defaultForestBindings();
@@ -564,9 +589,7 @@ public final class ForestBookmarks {
     }
 
     private static List<ForestBinding> defaultForestBindings() {
-        return List.of(
-                new ForestBinding(BindingType.KEYSYM, "key.keyboard.f", DEFAULT_FOREST_KEY_CODE, 0),
-                new ForestBinding(BindingType.KEYSYM, "key.keyboard.f", DEFAULT_FOREST_KEY_CODE, SHIFT_MODIFIER));
+        return List.of(new ForestBinding(BindingType.KEYSYM, "key.keyboard.f", DEFAULT_FOREST_KEY_CODE, 0));
     }
 
     private static List<ForestBinding> migratedBindings(int keyCode) {
@@ -742,7 +765,7 @@ public final class ForestBookmarks {
 
             // No live state is touched until every recoverable root has been fully prepared.
             ForestManager.clear();
-            for (PreparedRoot preparedRoot : prepared) {
+            for (PreparedRoot preparedRoot : prepared.subList(0, Math.min(prepared.size(), getMaxRoots()))) {
                 MaterialTree tree = ForestManager.add(preparedRoot.recipe);
                 tree.batches = preparedRoot.tree.batches;
                 tree.resolutions.clear();

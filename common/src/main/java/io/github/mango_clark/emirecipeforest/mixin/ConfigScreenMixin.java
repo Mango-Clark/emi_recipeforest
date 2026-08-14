@@ -24,6 +24,7 @@ import dev.emi.emi.screen.widget.config.ConfigJumpButton;
 import dev.emi.emi.screen.widget.config.GroupNameWidget;
 import dev.emi.emi.screen.widget.config.IntEdit;
 import dev.emi.emi.screen.widget.config.IntGroupWidget;
+import dev.emi.emi.screen.widget.config.IntWidget;
 import dev.emi.emi.screen.widget.config.ListWidget;
 import dev.emi.emi.screen.widget.config.ListWidget.Entry;
 import dev.emi.emi.screen.widget.config.SubGroupNameWidget;
@@ -178,6 +179,21 @@ public abstract class ConfigScreenMixin extends Screen {
                         ForestBookmarks.setRootGridSize(columns, rows);
                     }
                 });
+        IntWidget maxRoots = new IntWidget(
+                Component.translatable("screen.emi_recipeforest.settings.max_roots"),
+                recipeForest$tooltip("screen.emi_recipeforest.settings.max_roots.tooltip"), currentSearch,
+                ((ConfigScreen) (Object) this).new Mutator<Integer>() {
+                    @Override
+                    protected Integer getValue() {
+                        return ForestBookmarks.getMaxRoots();
+                    }
+
+                    @Override
+                    protected void setValue(Integer value) {
+                        int roots = Math.max(1, Math.min(ForestBookmarks.MAX_ROOTS_LIMIT, value));
+                        ForestBookmarks.setMaxRoots(roots);
+                    }
+                });
         settings.add(new RecipeForestValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.title"), currentSearch,
                 recipeForest$tooltip("screen.emi_recipeforest.settings.reset.tooltip"),
@@ -196,7 +212,7 @@ public abstract class ConfigScreenMixin extends Screen {
         }
         inserted.add(details);
         list.addEntry(details);
-        for (ConfigEntryWidget setting : List.of(gridSize)) {
+        for (ConfigEntryWidget setting : List.of(gridSize, maxRoots)) {
             group.children.add(setting);
             details.children.add(setting);
             setting.parentGroups.add(group);
@@ -221,14 +237,19 @@ public abstract class ConfigScreenMixin extends Screen {
         }
 
         ConfigJumpButton dev = nativeButtons.get(nativeButtons.size() - 1);
-        int recipeForestY = dev.getY() - 8;
+        int recipeForestY = dev.getY() - 16;
         for (ConfigJumpButton button : nativeButtons) {
-            button.setY(button.getY() - 8);
+            button.setY(button.getY() - 16);
         }
-        dev.setY(dev.getY() + 16);
+        dev.setY(dev.getY() + 32);
         addRenderableWidget(new RecipeForestJumpButton(2, recipeForestY,
                 () -> ((ConfigScreen) (Object) this).jump(RECIPE_FOREST$GROUP_ID),
-                () -> recipeForest$collisionRevision));
+                () -> recipeForest$collisionRevision, 0, 0,
+                "screen.emi_recipeforest.settings.title", "screen.emi_recipeforest.settings.jump.tooltip"));
+        addRenderableWidget(new RecipeForestJumpButton(10, recipeForestY + 16,
+                () -> ((ConfigScreen) (Object) this).jump(RECIPE_FOREST$GROUP_ID + ".details"),
+                () -> 0, 16, 16,
+                "screen.emi_recipeforest.settings.details", "screen.emi_recipeforest.settings.details.jump.tooltip"));
     }
 
     @Unique
@@ -289,6 +310,7 @@ public abstract class ConfigScreenMixin extends Screen {
         ForestBookmarks.setBoxEnabled(true);
         ForestBookmarks.setStacksPerBox(27);
         ForestBookmarks.setRootGridSize(8, 2);
+        ForestBookmarks.setMaxRoots(ForestBookmarks.DEFAULT_MAX_ROOTS);
     }
 
     @Inject(method = { "keyPressed", "keyReleased" }, at = @At("HEAD"))
@@ -345,13 +367,20 @@ public abstract class ConfigScreenMixin extends Screen {
     private static final class RecipeForestJumpButton extends AbstractButton {
         private final Runnable action;
         private final IntSupplier collisionRevision;
+        private final int u;
+        private final int v;
+        private final String tooltipKey;
         private int lastCollisionRevision = -1;
         private List<ForestBind.Collision> collisions = List.of();
 
-        private RecipeForestJumpButton(int x, int y, Runnable action, IntSupplier collisionRevision) {
-            super(x, y, 16, 16, Component.translatable("screen.emi_recipeforest.settings.title"));
+        private RecipeForestJumpButton(int x, int y, Runnable action, IntSupplier collisionRevision,
+                int u, int v, String titleKey, String tooltipKey) {
+            super(x, y, 16, 16, Component.translatable(titleKey));
             this.action = action;
             this.collisionRevision = collisionRevision;
+            this.u = u;
+            this.v = v;
+            this.tooltipKey = tooltipKey;
         }
 
         @Override
@@ -375,14 +404,14 @@ public abstract class ConfigScreenMixin extends Screen {
             }
             context.push();
             context.matrices().translate(0, 0, 100);
-            context.drawTexture(RECIPE_FOREST$WIDGETS, getX(), getY(), 0, 0, 16, 16, 16, 64, 32);
+            context.drawTexture(RECIPE_FOREST$WIDGETS, getX(), getY(), 0, u, v, 16, 16, 64, 32);
             context.pop();
             context.resetColor();
 
             if (isMouseOver(mouseX, mouseY)) {
                 List<ClientTooltipComponent> tooltip = new ArrayList<>();
                 tooltip.add(ClientTooltipComponent.create(getMessage().getVisualOrderText()));
-                tooltip.addAll(recipeForest$tooltip("screen.emi_recipeforest.settings.jump.tooltip"));
+                tooltip.addAll(recipeForest$tooltip(tooltipKey));
                 for (ForestBind.Collision collision : collisions) {
                     tooltip.add(ClientTooltipComponent.create(Component.translatable(
                             "screen.emi_recipeforest.settings.forest_key.override", collision.translatedName())

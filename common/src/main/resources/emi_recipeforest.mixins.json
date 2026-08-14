@@ -9,6 +9,8 @@
   "client": [
     "BoMMixin",
     "ConfigScreenMixin",
+    "ConfigEntryWidgetMixin",
+    "EmiBindWidgetAccessor",
     "EmiApiMixin",
     "RecipeTreeButtonWidgetMixin",
     "EmiReloadManagerMixin",
