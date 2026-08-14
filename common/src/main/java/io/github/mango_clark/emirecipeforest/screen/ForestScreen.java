@@ -448,6 +448,7 @@ public class ForestScreen extends BoMScreen {
 			List<ClientTooltipComponent> list = Lists.newArrayList();
 			list.addAll(EmiTooltip.splitTranslate("tooltip.emi.bom.batch_size", BoM.tree.batches));
 			list.addAll(EmiTooltip.splitTranslate("tooltip.emi.bom.batch_size.ideal", EmiPort.literal("Left Click")));
+			list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.batch.help"));
 			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
 		} else if (!panelHovered && BoM.tree != null && mode.contains(mx, my)) {
 			String key = BoM.craftingMode ? "tooltip.emi.bom.mode.craft" : "tooltip.emi.bom.mode.view";
@@ -455,7 +456,12 @@ public class ForestScreen extends BoMScreen {
 			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
 		} else if (help.contains(mouseX, mouseY)) {
 			List<ClientTooltipComponent> list =  EmiTooltip.splitTranslate("tooltip.emi.bom.help");
+			list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.help.pointer"));
 			EmiRenderHelper.drawTooltip(this, context, list, help.x(), help.y(), width);
+		} else if (rootPanelHelpIcon().contains(mouseX, mouseY)) {
+			String layout = ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST ? "list" : "grid";
+			List<ClientTooltipComponent> list = EmiTooltip.splitTranslate("tooltip.emi_recipeforest.help." + layout);
+			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
 		} else if (ForestBookmarks.getRootLayout() == ForestBookmarks.RootLayout.LIST) {
 			int direction = rootListMoveDirectionAt(mouseX, mouseY);
 			if (direction != 0) {
@@ -882,6 +888,10 @@ public class ForestScreen extends BoMScreen {
 			(ingredient, preferred) -> applyResolution(hover, ingredient, preferred, forestScope));
 	}
 
+	private Bounds rootPanelHelpIcon() {
+		return rootPanelHasContent() ? new Bounds(rootPanelLeft() + 4, rootPanelTop() + 5, 16, 16) : Bounds.EMPTY;
+	}
+
 	private void applyResolution(Hover hover, EmiIngredient ingredient, EmiRecipe recipe, ResolutionScope forestScope) {
 		if (forestScope == null && hover.node != null && BoM.tree != null) {
 			BoM.tree.addResolution(ingredient, recipe);
@@ -1012,9 +1022,7 @@ public class ForestScreen extends BoMScreen {
 				if (index >= 0 && index < ForestManager.size()) {
 					int rowY = rootListTop() + index * ROOT_LIST_ROW_HEIGHT - rootListScroll;
 					if (button == 1) {
-						MaterialTree tree = ForestManager.getTrees().get(index);
-						tree.batches = Math.max(1, tree.cost.getIdealBatch(tree.goal, 1, 1));
-						ForestManager.select(index);
+						applyMinimalLeftoverBatch(index);
 					} else if (rootListControlBounds(rowY, 0).contains((int) mouseX, (int) mouseY)) {
 						adjustRootListBatch(index, -1);
 					} else if (rootListControlBounds(rowY, 1).contains((int) mouseX, (int) mouseY)) {
@@ -1069,9 +1077,7 @@ public class ForestScreen extends BoMScreen {
 		if (button == 0 && withinX >= 12 && withinY < 6) {
 			ForestManager.remove(index);
 		} else if (button == 1) {
-			MaterialTree tree = ForestManager.getTrees().get(index);
-			tree.batches = Math.max(1, tree.cost.getIdealBatch(tree.goal, 1, 1));
-			ForestManager.select(index);
+			applyMinimalLeftoverBatch(index);
 		} else if (button == 0) {
 			ForestManager.select(index);
 		} else {
@@ -1079,6 +1085,15 @@ public class ForestScreen extends BoMScreen {
 		}
 		recalculateTree();
 		return true;
+	}
+
+	private void applyMinimalLeftoverBatch(int index) {
+		List<MaterialTree> targets = EmiInput.isAltDown()
+			? ForestManager.getTrees() : List.of(ForestManager.getTrees().get(index));
+		for (MaterialTree tree : targets) {
+			tree.batches = Math.max(1, tree.cost.getIdealBatch(tree.goal, 1, 1));
+		}
+		ForestManager.select(index);
 	}
 
 	private void moveRootListEntry(int index, int direction) {

@@ -109,7 +109,8 @@ def emiCompatibilityContracts = [
         'dev.emi.emi.screen.widget.config.ConfigJumpButton': [],
         'dev.emi.emi.screen.widget.config.EmiBindWidget': [
                 [token: 'EmiBindWidget(', descriptor: '(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Supplier;Ldev/emi/emi/input/EmiBind;)V', access: 'public'],
-                [token: ' update(', descriptor: '(IIII)V', access: 'public']
+                [token: ' update(', descriptor: '(IIII)V', access: 'public'],
+                [token: ' bind;', descriptor: 'Ldev/emi/emi/input/EmiBind;', access: 'private']
         ],
         'dev.emi.emi.screen.widget.config.IntEdit': [
                 [token: 'IntEdit(', descriptor: '(ILjava/util/function/IntSupplier;Ljava/util/function/IntConsumer;)V', access: 'public'],
@@ -129,7 +130,8 @@ def emiCompatibilityContracts = [
                 [token: 'RecipeScreen(', descriptor: '(Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;Ljava/util/Map;)V', access: 'public'],
                 [token: ' onClose(', descriptor: '()V', access: 'public'],
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public'],
-                [token: ' resolve;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static']
+                [token: ' resolve;', descriptor: 'Ldev/emi/emi/api/stack/EmiIngredient;', access: 'public static'],
+                [token: ' currentPage;', descriptor: 'Ljava/util/List;', access: 'private']
         ],
         'dev.emi.emi.api.EmiApi': [
                 [token: ' viewRecipeTree(', descriptor: '()V', access: 'public static'],
@@ -175,6 +177,7 @@ def emiCompatibilityContracts = [
         'dev.emi.emi.screen.EmiScreenManager': [
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public static'],
                 [token: ' genericInteraction(', descriptor: '(Ljava/util/function/Function;)Z', access: 'public static'],
+                [token: ' stackInteraction(', descriptor: '(Ldev/emi/emi/api/stack/EmiStackInteraction;Ljava/util/function/Function;)Z', access: 'public static'],
                 [token: ' mouseClicked(', descriptor: '(DDI)Z', access: 'public static'],
                 [token: ' mouseReleased(', descriptor: '(DDI)Z', access: 'public static'],
                 [token: ' mouseDragged(', descriptor: '(DDIDD)Z', access: 'public static'],

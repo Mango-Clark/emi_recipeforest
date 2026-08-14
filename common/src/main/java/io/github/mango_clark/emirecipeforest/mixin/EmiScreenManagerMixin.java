@@ -2,6 +2,7 @@ package io.github.mango_clark.emirecipeforest.mixin;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.Function;
 
 import dev.emi.emi.EmiPort;
 import dev.emi.emi.EmiUtil;
@@ -11,7 +12,9 @@ import dev.emi.emi.api.recipe.EmiRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.stack.EmiStackInteraction;
+import dev.emi.emi.config.EmiConfig;
 import dev.emi.emi.config.SidebarType;
+import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.input.EmiInput;
 import dev.emi.emi.screen.EmiScreenManager;
 import dev.emi.emi.screen.widget.SizedButtonWidget;
@@ -90,6 +93,30 @@ public abstract class EmiScreenManagerMixin {
         if (hovered == null || hovered.isEmpty()) {
             return false;
         }
+        EmiRecipe recipe = recipeForest$resolveRecipe(hovered);
+        if (recipe == null || !recipe.supportsRecipeTree()) {
+            return false;
+        }
+
+        ForestManager.add(recipe);
+        return true;
+    }
+
+    @Inject(method = "stackInteraction", at = @At("HEAD"), cancellable = true)
+    private static void recipeForest$handleViewStackForest(EmiStackInteraction hovered,
+            Function<EmiBind, Boolean> input, CallbackInfoReturnable<Boolean> cir) {
+        if (!input.apply(EmiConfig.viewStackTree)) {
+            return;
+        }
+        EmiRecipe recipe = recipeForest$resolveRecipe(hovered);
+        if (recipe != null && recipe.supportsRecipeTree()) {
+            ForestManager.add(recipe);
+            cir.setReturnValue(true);
+        }
+    }
+
+    @Unique
+    private static EmiRecipe recipeForest$resolveRecipe(EmiStackInteraction hovered) {
         EmiRecipe recipe = hovered.getRecipeContext();
         if ((recipe == null || !recipe.supportsRecipeTree()) && lastPlayerInventory != null) {
             LinkedHashSet<EmiRecipe> candidates = new LinkedHashSet<>();
@@ -98,12 +125,7 @@ public abstract class EmiScreenManagerMixin {
             }
             recipe = EmiUtil.getPreferredRecipe(List.copyOf(candidates), lastPlayerInventory, false);
         }
-        if (recipe == null || !recipe.supportsRecipeTree()) {
-            return false;
-        }
-
-        ForestManager.add(recipe);
-        return true;
+        return recipe;
     }
 
     @Redirect(method = "genericInteraction", at = @At(value = "INVOKE",

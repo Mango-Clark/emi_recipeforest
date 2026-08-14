@@ -119,6 +119,10 @@ public final class EmiCompatibility {
                     "(Ldev/emi/emi/config/SidebarType;)Ljava/util/List;", true, missing);
             case "dev.emi.emi.screen.widget.EmiSearchWidget" ->
                     requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
+            case "dev.emi.emi.screen.widget.config.ConfigEntryWidget" -> requireMethod(targetClass, "render",
+                    "(Lnet/minecraft/client/gui/GuiGraphics;IIIIIIIZF)V", false, missing);
+            case "dev.emi.emi.screen.widget.config.EmiBindWidget" -> requirePrivateField(targetClass, "bind",
+                    "Ldev/emi/emi/input/EmiBind;", false, missing);
             case "dev.emi.emi.screen.ConfigScreen" -> {
                 requireField(targetClass, "list", "Ldev/emi/emi/screen/widget/config/ListWidget;", false, missing);
                 requireField(targetClass, "activeBind", "Ldev/emi/emi/input/EmiBind;", false, missing);
@@ -140,6 +144,7 @@ public final class EmiCompatibility {
                 requireMethod(targetClass, "onClose", "()V", false, missing);
                 requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
                 requireField(targetClass, "resolve", "Ldev/emi/emi/api/stack/EmiIngredient;", true, missing);
+                requirePrivateField(targetClass, "currentPage", "Ljava/util/List;", false, missing);
                 requireMethodInvocations(targetClass, "keyPressed", "(III)Z", Opcodes.INVOKESTATIC,
                         "dev/emi/emi/screen/EmiScreenManager", "recipeInteraction",
                         "(Ldev/emi/emi/api/recipe/EmiRecipe;Ljava/util/function/Function;)Z", 1, missing);
@@ -156,6 +161,9 @@ public final class EmiCompatibility {
             case "dev.emi.emi.screen.EmiScreenManager" -> {
                 requireMethod(targetClass, "keyPressed", "(III)Z", true, missing);
                 requireMethod(targetClass, "genericInteraction", "(Ljava/util/function/Function;)Z", true, missing);
+                requireMethod(targetClass, "stackInteraction",
+                        "(Ldev/emi/emi/api/stack/EmiStackInteraction;Ljava/util/function/Function;)Z", true,
+                        missing);
                 requireMethod(targetClass, "mouseClicked", "(DDI)Z", true, missing);
                 requireMethod(targetClass, "mouseReleased", "(DDI)Z", true, missing);
                 requireMethod(targetClass, "mouseDragged", "(DDIDD)Z", true, missing);
@@ -538,6 +546,7 @@ public final class EmiCompatibility {
                             + "Ldev/emi/emi/input/EmiBind;)V",
                     false, missing);
             requireMethod(bindWidget, "update", "(IIII)V", false, missing);
+            requirePrivateField(bindWidget, "bind", "Ldev/emi/emi/input/EmiBind;", false, missing);
             requireMethod(intEdit, "<init>",
                     "(ILjava/util/function/IntSupplier;Ljava/util/function/IntConsumer;)V", false, missing);
             requireField(intEdit, "text", "Lnet/minecraft/client/gui/components/EditBox;", false, missing);
@@ -553,6 +562,8 @@ public final class EmiCompatibility {
                     false, missing);
             requireMethod(screenManager, "keyPressed", "(III)Z", true, missing);
             requireMethod(screenManager, "genericInteraction", "(Ljava/util/function/Function;)Z", true, missing);
+            requireMethod(screenManager, "stackInteraction",
+                    "(Ldev/emi/emi/api/stack/EmiStackInteraction;Ljava/util/function/Function;)Z", true, missing);
             requireMethod(screenManager, "recipeInteraction",
                     "(Ldev/emi/emi/api/recipe/EmiRecipe;Ljava/util/function/Function;)Z", true, missing);
             requireMethod(screenManager, "mouseClicked", "(DDI)Z", true, missing);
@@ -565,6 +576,7 @@ public final class EmiCompatibility {
             requireMethodInvocations(screenManager, "genericInteraction", "(Ljava/util/function/Function;)Z",
                     Opcodes.INVOKESTATIC, "dev/emi/emi/api/EmiApi", "viewRecipeTree", "()V", 1, missing);
             requireMethod(recipeScreen, "keyPressed", "(III)Z", false, missing);
+            requirePrivateField(recipeScreen, "currentPage", "Ljava/util/List;", false, missing);
             requireMethodInvocations(recipeScreen, "keyPressed", "(III)Z", Opcodes.INVOKESTATIC,
                     "dev/emi/emi/screen/EmiScreenManager", "recipeInteraction",
                     "(Ldev/emi/emi/api/recipe/EmiRecipe;Ljava/util/function/Function;)Z", 1, missing);

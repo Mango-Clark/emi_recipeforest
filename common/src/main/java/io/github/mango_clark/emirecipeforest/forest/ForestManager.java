@@ -161,7 +161,7 @@ public final class ForestManager {
      * Appends and selects a new root, or initializes EMI's canonical tree when empty.
      *
      * @param recipe supported root recipe
-     * @return newly selected material tree
+     * @return newly selected material tree, or {@code null} when the configured root limit is reached
      */
     public static MaterialTree add(EmiRecipe recipe) {
         Objects.requireNonNull(recipe, "recipe");
@@ -169,6 +169,9 @@ public final class ForestManager {
         if (TREES.isEmpty()) {
             replaceSolo(recipe);
             return getSelectedTree();
+        }
+        if (TREES.size() >= ForestBookmarks.getMaxRoots()) {
+            return null;
         }
 
         MaterialTree tree = new MaterialTree(recipe);
