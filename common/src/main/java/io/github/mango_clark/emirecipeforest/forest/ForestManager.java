@@ -161,7 +161,7 @@ public final class ForestManager {
      * Appends and selects a new root, or initializes EMI's canonical tree when empty.
      *
      * @param recipe supported root recipe
-     * @return newly selected material tree, or {@code null} when the configured root limit is reached
+     * @return newly selected material tree
      */
     public static MaterialTree add(EmiRecipe recipe) {
         Objects.requireNonNull(recipe, "recipe");
@@ -170,15 +170,38 @@ public final class ForestManager {
             replaceSolo(recipe);
             return getSelectedTree();
         }
-        if (TREES.size() >= ForestBookmarks.getMaxRoots()) {
-            return null;
-        }
-
         MaterialTree tree = new MaterialTree(recipe);
         TREES.add(tree);
         selectedIndex = TREES.size() - 1;
         synchronizeSelectedTree();
         return tree;
+    }
+
+    /**
+     * Reports whether a live root uses the supplied recipe.
+     *
+     * @param recipe recipe to find
+     * @return whether at least one root has the same recipe identity
+     */
+    public static boolean containsRecipe(EmiRecipe recipe) {
+        if (recipe == null) {
+            return false;
+        }
+        return TREES.stream().anyMatch(tree -> tree != null && tree.goal != null
+                && sameRecipe(tree.goal.recipe, recipe));
+    }
+
+    private static boolean sameRecipe(EmiRecipe left, EmiRecipe right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left.getId() != null || right.getId() != null) {
+            return Objects.equals(left.getId(), right.getId());
+        }
+        return left.equals(right);
     }
 
     /**

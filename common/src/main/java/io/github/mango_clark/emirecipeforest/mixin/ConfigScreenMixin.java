@@ -179,19 +179,19 @@ public abstract class ConfigScreenMixin extends Screen {
                         ForestBookmarks.setRootGridSize(columns, rows);
                     }
                 });
-        IntWidget maxRoots = new IntWidget(
-                Component.translatable("screen.emi_recipeforest.settings.max_roots"),
-                recipeForest$tooltip("screen.emi_recipeforest.settings.max_roots.tooltip"), currentSearch,
+        IntWidget listLength = new IntWidget(
+                Component.translatable("screen.emi_recipeforest.settings.list_length"),
+                recipeForest$tooltip("screen.emi_recipeforest.settings.list_length.tooltip"), currentSearch,
                 ((ConfigScreen) (Object) this).new Mutator<Integer>() {
                     @Override
                     protected Integer getValue() {
-                        return ForestBookmarks.getMaxRoots();
+                        return ForestBookmarks.getListLength();
                     }
 
                     @Override
                     protected void setValue(Integer value) {
-                        int roots = Math.max(1, Math.min(ForestBookmarks.MAX_ROOTS_LIMIT, value));
-                        ForestBookmarks.setMaxRoots(roots);
+                        int rows = Math.max(1, Math.min(ForestBookmarks.LIST_LENGTH_LIMIT, value));
+                        ForestBookmarks.setListLength(rows);
                     }
                 });
         settings.add(new RecipeForestValueEntry(
@@ -212,7 +212,7 @@ public abstract class ConfigScreenMixin extends Screen {
         }
         inserted.add(details);
         list.addEntry(details);
-        for (ConfigEntryWidget setting : List.of(gridSize, maxRoots)) {
+        for (ConfigEntryWidget setting : List.of(gridSize, listLength)) {
             group.children.add(setting);
             details.children.add(setting);
             setting.parentGroups.add(group);
@@ -310,7 +310,7 @@ public abstract class ConfigScreenMixin extends Screen {
         ForestBookmarks.setBoxEnabled(true);
         ForestBookmarks.setStacksPerBox(27);
         ForestBookmarks.setRootGridSize(8, 2);
-        ForestBookmarks.setMaxRoots(ForestBookmarks.DEFAULT_MAX_ROOTS);
+        ForestBookmarks.setListLength(ForestBookmarks.DEFAULT_LIST_LENGTH);
     }
 
     @Inject(method = { "keyPressed", "keyReleased" }, at = @At("HEAD"))

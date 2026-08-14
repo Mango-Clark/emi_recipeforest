@@ -73,21 +73,46 @@ class ForestBehaviorTest {
     }
 
     @Test
-    void configuredRootLimitRejectsAdditionalRootsAndPersists() throws Exception {
+    void listLengthDoesNotLimitRootsAndPersists() throws Exception {
         Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
-        call(bookmarks, "setMaxRoots", types(int.class), 2);
+        call(bookmarks, "setListLength", types(int.class), 2);
 
         Object recipe = runtime.recipe("test:limited", runtime.stack("limited", 1), List.of());
         assertNotSame(null, call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
         assertNotSame(null, call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
-        assertNull(call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
-        assertEquals(2, call(manager, "size", types()));
+        assertNotSame(null, call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
+        assertEquals(3, call(manager, "size", types()));
+        assertTrue((boolean) call(manager, "containsRecipe", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe));
+        assertTrue((boolean) call(manager, "containsRecipe", types("dev.emi.emi.api.recipe.EmiRecipe"),
+                runtime.recipe("test:limited", runtime.stack("replacement", 1), List.of())));
+        assertFalse((boolean) call(manager, "containsRecipe", types("dev.emi.emi.api.recipe.EmiRecipe"),
+                runtime.recipe("test:other", runtime.stack("other", 1), List.of())));
 
-        call(bookmarks, "setMaxRoots", types(int.class), 1);
-        assertEquals(2, call(bookmarks, "getMaxRoots", types()));
+        call(bookmarks, "setListLength", types(int.class), 1);
+        assertEquals(1, call(bookmarks, "getListLength", types()));
 
         call(bookmarks, "load", types());
-        assertEquals(2, call(bookmarks, "getMaxRoots", types()));
+        assertEquals(1, call(bookmarks, "getListLength", types()));
+
+        Object legacyRoot = jsonObject();
+        addProperty(legacyRoot, "schema", 2);
+        Object legacySettings = jsonObject();
+        addProperty(legacySettings, "maxRoots", 4);
+        jsonAdd(legacyRoot, "settings", legacySettings);
+        jsonAdd(legacyRoot, "searches", jsonArray());
+        jsonAdd(legacyRoot, "trees", jsonArray());
+        Path config = gameDirectory.resolve("config/emi_recipeforest.json");
+        Files.writeString(config, gsonString(legacyRoot));
+        call(bookmarks, "load", types());
+        assertEquals(4, call(bookmarks, "getListLength", types()));
+
+        call(bookmarks, "setListLength", types(int.class), 3);
+        Field gsonValues = runtime.type("com.google.gson.Gson").getDeclaredField("VALUES");
+        gsonValues.setAccessible(true);
+        Object savedRoot = ((Map<?, ?>) gsonValues.get(null)).get(Files.readString(config));
+        Object savedSettings = invoke(savedRoot, "getAsJsonObject", types(String.class), "settings");
+        assertTrue((boolean) invoke(savedSettings, "has", types(String.class), "listLength"));
+        assertFalse((boolean) invoke(savedSettings, "has", types(String.class), "maxRoots"));
     }
 
     @Test
@@ -536,7 +561,7 @@ class ForestBehaviorTest {
         assertEquals(70, call(bookmarks, "getForestKeyCode", types()));
         assertTrue((boolean) call(bookmarks, "isBoxEnabled", types()));
         assertEquals(27, call(bookmarks, "getStacksPerBox", types()));
-        assertEquals(64, call(bookmarks, "getMaxRoots", types()));
+        assertEquals(64, call(bookmarks, "getListLength", types()));
 
         call(bookmarks, "setResolutionScope", types(resolutionScope), enumConstant(resolutionScope, "MATCHING_ROOTS"));
         call(bookmarks, "setRootLayout", types(rootLayout), enumConstant(rootLayout, "GRID"));
@@ -544,7 +569,7 @@ class ForestBehaviorTest {
         call(bookmarks, "setForestKeyCode", types(int.class), 71);
         call(bookmarks, "setBoxEnabled", types(boolean.class), false);
         call(bookmarks, "setStacksPerBox", types(int.class), 999);
-        call(bookmarks, "setMaxRoots", types(int.class), 999);
+        call(bookmarks, "setListLength", types(int.class), 999);
         call(bookmarks, "load", types());
 
         assertEquals("MATCHING_ROOTS", call(bookmarks, "getResolutionScope", types()).toString());
@@ -553,7 +578,7 @@ class ForestBehaviorTest {
         assertEquals(71, call(bookmarks, "getForestKeyCode", types()));
         assertFalse((boolean) call(bookmarks, "isBoxEnabled", types()));
         assertEquals(256, call(bookmarks, "getStacksPerBox", types()));
-        assertEquals(256, call(bookmarks, "getMaxRoots", types()));
+        assertEquals(256, call(bookmarks, "getListLength", types()));
 
         call(bookmarks, "setStacksPerBox", types(int.class), -1);
         call(bookmarks, "load", types());
@@ -571,7 +596,7 @@ class ForestBehaviorTest {
         addProperty(settings, "forestBindings", "broken");
         addProperty(settings, "boxEnabled", "broken");
         addProperty(settings, "stacksPerBox", "broken");
-        addProperty(settings, "maxRoots", "broken");
+        addProperty(settings, "listLength", "broken");
         call(bookmarks, "load", types());
 
         assertEquals(4, call(bookmarks, "getRootGridColumns", types()));
@@ -582,7 +607,7 @@ class ForestBehaviorTest {
         assertEquals(70, call(bookmarks, "getForestKeyCode", types()));
         assertTrue((boolean) call(bookmarks, "isBoxEnabled", types()));
         assertEquals(27, call(bookmarks, "getStacksPerBox", types()));
-        assertEquals(64, call(bookmarks, "getMaxRoots", types()));
+        assertEquals(64, call(bookmarks, "getListLength", types()));
     }
 
     @Test
