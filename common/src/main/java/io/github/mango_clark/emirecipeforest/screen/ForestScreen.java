@@ -459,7 +459,8 @@ public class ForestScreen extends BoMScreen {
 			List<ClientTooltipComponent> list = EmiTooltip.splitTranslate(key, BoM.tree.batches);
 			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
 		} else if (help.contains(mouseX, mouseY)) {
-			List<ClientTooltipComponent> list =  EmiTooltip.splitTranslate("tooltip.emi.bom.help");
+			List<ClientTooltipComponent> list = Lists.newArrayList(
+				EmiTooltip.splitTranslate("tooltip.emi.bom.help"));
 			list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.help.pointer"));
 			EmiRenderHelper.drawTooltip(this, context, list, help.x(), help.y(), width);
 		} else if (rootPanelHelpIcon().contains(mouseX, mouseY)) {
