@@ -315,6 +315,54 @@ public final class ForestBookmarks {
         save();
     }
 
+    /** Captures the settings edited through EMI's configuration screen. */
+    public static ConfigState captureConfigState() {
+        return new ConfigState(resolutionScope, rootLayout, quantityMode, forestBindings, boxEnabled,
+                stacksPerBox, rootGridColumns, rootGridRows, listLength);
+    }
+
+    /** Restores a configuration-screen snapshot with a single persistence write. */
+    public static void restoreConfigState(ConfigState state) {
+        Objects.requireNonNull(state, "state");
+        resolutionScope = state.resolutionScope;
+        rootLayout = state.rootLayout;
+        quantityMode = state.quantityMode;
+        forestBindings = List.copyOf(state.forestBindings);
+        boxEnabled = state.boxEnabled;
+        stacksPerBox = state.stacksPerBox;
+        rootGridColumns = state.rootGridColumns;
+        rootGridRows = state.rootGridRows;
+        listLength = state.listLength;
+        save();
+    }
+
+    /** Immutable configuration-screen state used by EMI's Revert operation. */
+    public record ConfigState(ResolutionScope resolutionScope, RootLayout rootLayout, QuantityMode quantityMode,
+            List<ForestBinding> forestBindings, boolean boxEnabled, int stacksPerBox, int rootGridColumns,
+            int rootGridRows, int listLength) {
+        public ConfigState {
+            Objects.requireNonNull(resolutionScope, "resolutionScope");
+            Objects.requireNonNull(rootLayout, "rootLayout");
+            Objects.requireNonNull(quantityMode, "quantityMode");
+            forestBindings = List.copyOf(forestBindings);
+        }
+
+        /** Counts configuration entries that differ from this snapshot. */
+        public int countChanges(ConfigState current) {
+            Objects.requireNonNull(current, "current");
+            int changes = 0;
+            changes += resolutionScope != current.resolutionScope ? 1 : 0;
+            changes += rootLayout != current.rootLayout ? 1 : 0;
+            changes += quantityMode != current.quantityMode ? 1 : 0;
+            changes += !forestBindings.equals(current.forestBindings) ? 1 : 0;
+            changes += boxEnabled != current.boxEnabled ? 1 : 0;
+            changes += stacksPerBox != current.stacksPerBox ? 1 : 0;
+            changes += rootGridColumns != current.rootGridColumns || rootGridRows != current.rootGridRows ? 1 : 0;
+            changes += listLength != current.listLength ? 1 : 0;
+            return changes;
+        }
+    }
+
     /**
      * Adds a normalized search bookmark unless an equivalent one already exists.
      *
