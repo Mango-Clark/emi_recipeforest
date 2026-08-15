@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- RecipeForest settings now participate in EMI's native Revert changes action.
 - Hovering EMI Help in the Forest screen no longer crashes when RecipeForest appends its guidance.
 - List Length now limits only the visible LIST viewport instead of blocking additional roots in either LIST or GRID.
 - EMI's View Tree shortcut now redirects from its actual generic-input call site, preventing inventory-open Mixin crashes on Fabric and Forge.

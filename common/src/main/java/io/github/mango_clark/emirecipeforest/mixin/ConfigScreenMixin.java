@@ -10,6 +10,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 
 import dev.emi.emi.EmiPort;
 import dev.emi.emi.EmiRenderHelper;
+import dev.emi.emi.config.EmiConfig;
 import dev.emi.emi.config.IntGroup;
 import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.runtime.EmiDrawContext;
@@ -29,6 +30,7 @@ import dev.emi.emi.screen.widget.config.ListWidget;
 import dev.emi.emi.screen.widget.config.ListWidget.Entry;
 import dev.emi.emi.screen.widget.config.SubGroupNameWidget;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
+import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ConfigState;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.RootLayout;
 import io.github.mango_clark.emirecipeforest.input.ForestBind;
@@ -71,6 +73,10 @@ public abstract class ConfigScreenMixin extends Screen {
     private ConfigSearch search;
     @Shadow
     public EmiBind activeBind;
+    @Shadow
+    public String originalConfig;
+    @Shadow
+    public Button resetButton;
 
     @Unique
     private boolean recipeForest$groupCollapsed;
@@ -80,9 +86,18 @@ public abstract class ConfigScreenMixin extends Screen {
     private boolean recipeForest$anyBindWasActive;
     @Unique
     private int recipeForest$collisionRevision;
+    @Unique
+    private ConfigState recipeForest$originalConfig;
+    @Unique
+    private boolean recipeForest$revertClicked;
 
     protected ConfigScreenMixin(Component title) {
         super(title);
+    }
+
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void recipeForest$captureOriginalConfig(Screen last, CallbackInfo ci) {
+        recipeForest$originalConfig = ForestBookmarks.captureConfigState();
     }
 
     @Inject(method = "init", at = @At("HEAD"))
@@ -225,6 +240,19 @@ public abstract class ConfigScreenMixin extends Screen {
         entries.addAll(devIndex, inserted);
     }
 
+    @Inject(method = "updateChanges", at = @At("RETURN"))
+    private void recipeForest$includeConfigChanges(CallbackInfo ci) {
+        String[] originalLines = originalConfig.split("\n\n");
+        String[] currentLines = EmiConfig.getSavedConfig().split("\n\n");
+        int changes = 0;
+        for (int i = 0; i < originalLines.length && i < currentLines.length; i++) {
+            changes += originalLines[i].equals(currentLines[i]) ? 0 : 1;
+        }
+        changes += recipeForest$originalConfig.countChanges(ForestBookmarks.captureConfigState());
+        resetButton.active = changes > 0;
+        resetButton.setMessage(EmiPort.translatable("screen.emi.config.reset", changes));
+    }
+
     @Inject(method = "addJumpButtons()V", at = @At("RETURN"))
     private void recipeForest$addJumpButton(CallbackInfo ci) {
         boolean hasDevGroup = list.children().stream()
@@ -329,6 +357,8 @@ public abstract class ConfigScreenMixin extends Screen {
     @Inject(method = "mouseClicked", at = @At("HEAD"))
     private void recipeForest$trackForestBindMouseStart(double mouseX, double mouseY, int button,
             CallbackInfoReturnable<Boolean> cir) {
+        recipeForest$revertClicked = button == 0 && activeBind == null && resetButton != null && resetButton.active
+                && resetButton.isMouseOver(mouseX, mouseY);
         recipeForest$forestBindWasActive |= activeBind == ForestBind.INSTANCE;
         recipeForest$anyBindWasActive |= activeBind != null;
     }
@@ -336,6 +366,13 @@ public abstract class ConfigScreenMixin extends Screen {
     @Inject(method = "mouseClicked", at = @At("RETURN"))
     private void recipeForest$trackForestBindMouseEnd(double mouseX, double mouseY, int button,
             CallbackInfoReturnable<Boolean> cir) {
+        if (recipeForest$revertClicked) {
+            recipeForest$revertClicked = false;
+            ForestBookmarks.restoreConfigState(recipeForest$originalConfig);
+            ForestBind.INSTANCE.reloadFromBookmarks();
+            recipeForest$collisionRevision++;
+            ((ConfigScreen) (Object) this).updateChanges();
+        }
         recipeForest$persistFinishedForestBind();
     }
 

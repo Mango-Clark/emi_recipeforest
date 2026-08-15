@@ -116,6 +116,32 @@ class ForestBehaviorTest {
     }
 
     @Test
+    void configSnapshotCountsAndRevertsRecipeForestChanges() throws Exception {
+        Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
+        Object original = call(bookmarks, "captureConfigState", types());
+
+        call(bookmarks, "setBoxEnabled", types(boolean.class), false);
+        call(bookmarks, "setRootGridSize", types(int.class, int.class), 3, 4);
+        call(bookmarks, "setListLength", types(int.class), 12);
+        Object changed = call(bookmarks, "captureConfigState", types());
+        assertEquals(3, invoke(original, "countChanges", types(changed.getClass()), changed));
+
+        call(bookmarks, "restoreConfigState", types(original.getClass()), original);
+        assertEquals(0, invoke(original, "countChanges", types(original.getClass()),
+                call(bookmarks, "captureConfigState", types())));
+        assertTrue((boolean) call(bookmarks, "isBoxEnabled", types()));
+        assertEquals(8, call(bookmarks, "getRootGridColumns", types()));
+        assertEquals(2, call(bookmarks, "getRootGridRows", types()));
+        assertEquals(64, call(bookmarks, "getListLength", types()));
+
+        call(bookmarks, "load", types());
+        assertTrue((boolean) call(bookmarks, "isBoxEnabled", types()));
+        assertEquals(8, call(bookmarks, "getRootGridColumns", types()));
+        assertEquals(2, call(bookmarks, "getRootGridRows", types()));
+        assertEquals(64, call(bookmarks, "getListLength", types()));
+    }
+
+    @Test
     void movingRootsPreservesOrderAndSelectedTreeIdentity() throws Exception {
         Object first = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"),
                 runtime.recipe("test:first", runtime.stack("first", 1), List.of()));
