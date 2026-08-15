@@ -55,7 +55,7 @@ public abstract class RecipeTreeButtonWidgetMixin extends RecipeButtonWidget {
         }
         EmiDrawContext context = EmiDrawContext.wrap(graphics);
         context.resetColor();
-        int textureOffset = ForestManager.containsRecipe(recipeForest$recipe) ? 24 : 0;
+        int textureOffset = ForestManager.containsRecipe(recipeForest$recipe) ? 36 : 0;
         textureOffset += getBounds().contains(mouseX, mouseY) ? 12 : 0;
         context.drawTexture(RECIPE_FOREST$BUTTONS, x, y, 36, textureOffset, 12, 12);
     }
