@@ -6,17 +6,14 @@ import java.util.Locale;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-
 import dev.emi.emi.EmiPort;
-import dev.emi.emi.EmiRenderHelper;
 import dev.emi.emi.config.EmiConfig;
 import dev.emi.emi.config.IntGroup;
 import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.runtime.EmiDrawContext;
 import dev.emi.emi.screen.ConfigEnumScreen;
 import dev.emi.emi.screen.ConfigScreen;
-import dev.emi.emi.screen.ConfigScreen.Mutator;
+import dev.emi.emi.screen.widget.SizedButtonWidget;
 import dev.emi.emi.screen.widget.config.BooleanWidget;
 import dev.emi.emi.screen.widget.config.ConfigEntryWidget;
 import dev.emi.emi.screen.widget.config.ConfigSearch;
@@ -34,19 +31,15 @@ import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ConfigStat
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.RootLayout;
 import io.github.mango_clark.emirecipeforest.input.ForestBind;
-import io.github.mango_clark.emirecipeforest.screen.ConfigRevertSync;
+import io.github.mango_clark.emirecipeforest.screen.RecipeForestTextures;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -64,9 +57,6 @@ public abstract class ConfigScreenMixin extends Screen {
     private static final int RECIPE_FOREST$CONTROL_WIDTH = 150;
     @Unique
     private static final int RECIPE_FOREST$BUTTON_HEIGHT = 20;
-    @Unique
-    private static final ResourceLocation RECIPE_FOREST$WIDGETS = EmiPort.id("emi_recipeforest",
-            "textures/gui/widgets.png");
 
     @Shadow
     public ListWidget list;
@@ -188,8 +178,8 @@ public abstract class ConfigScreenMixin extends Screen {
 
                     @Override
                     protected void setValue(IntGroup value) {
-                        int columns = Math.max(1, Math.min(16, value.values.getInt(0)));
-                        int rows = Math.max(1, Math.min(8, value.values.getInt(1)));
+                        int columns = Math.clamp(value.values.getInt(0), 1, 16);
+                        int rows = Math.clamp(value.values.getInt(1), 1, 8);
                         value.values.set(0, columns);
                         value.values.set(1, rows);
                         ForestBookmarks.setRootGridSize(columns, rows);
@@ -246,39 +236,79 @@ public abstract class ConfigScreenMixin extends Screen {
         String[] originalLines = originalConfig.split("\n\n");
         String[] currentLines = EmiConfig.getSavedConfig().split("\n\n");
         int changes = 0;
-        for (int i = 0; i < originalLines.length && i < currentLines.length; i++) {
-            changes += originalLines[i].equals(currentLines[i]) ? 0 : 1;
+        int sectionCount = Math.max(originalLines.length, currentLines.length);
+        for (int i = 0; i < sectionCount; i++) {
+            if (i >= originalLines.length || i >= currentLines.length
+                    || !originalLines[i].equals(currentLines[i])) {
+                changes++;
+            }
         }
         changes += recipeForest$originalConfig.countChanges(ForestBookmarks.captureConfigState());
         resetButton.active = changes > 0;
         resetButton.setMessage(EmiPort.translatable("screen.emi.config.reset", changes));
     }
 
-    @Inject(method = "addJumpButtons()V", at = @At("RETURN"))
-    private void recipeForest$addJumpButton(CallbackInfo ci) {
-        boolean hasDevGroup = list.children().stream()
-                .anyMatch(entry -> entry instanceof GroupNameWidget group && "dev".equals(group.id));
-        List<ConfigJumpButton> nativeButtons = children().stream()
-                .filter(ConfigJumpButton.class::isInstance).map(ConfigJumpButton.class::cast).toList();
-        if (!hasDevGroup || nativeButtons.isEmpty()) {
-            throw new IllegalStateException("Incompatible EMI config index. RecipeForest supports EMI 1.1.13-1.1.24; "
-                    + "expected ConfigScreen.addJumpButtons() to create a final Dev ConfigJumpButton.");
+    @Inject(method = "addJumpButtons()V", at = @At("HEAD"), cancellable = true)
+    private void recipeForest$replaceJumpButtons(CallbackInfo ci) {
+        List<String> jumps = new ArrayList<>(List.of(
+                "general", "general.search",
+                "ui", "ui.left-sidebar", "ui.right-sidebar", "ui.top-sidebar", "ui.bottom-sidebar",
+                "binds", "binds.crafts", "binds.cheats",
+                RECIPE_FOREST$GROUP_ID, RECIPE_FOREST$GROUP_ID + ".details",
+                "dev"
+        ));
+        List<List<String>> removes = List.of(
+                List.of("binds.cheats"),
+                List.of("general.search"),
+                List.of("ui.top-sidebar", "ui.bottom-sidebar"),
+                List.of(RECIPE_FOREST$GROUP_ID + ".details"),
+                List.of("binds.crafts"),
+                List.of("ui.left-sidebar", "ui.right-sidebar")
+        );
+        int space = list.getLogicalHeight() - 10;
+        for (List<String> remove : removes) {
+            if (jumps.size() * 16 > space) {
+                jumps.removeAll(remove);
+            }
         }
-
-        ConfigJumpButton dev = nativeButtons.get(nativeButtons.size() - 1);
-        int recipeForestY = dev.getY() - 16;
-        for (ConfigJumpButton button : nativeButtons) {
-            button.setY(button.getY() - 16);
+        int y = 40 + (list.getLogicalHeight() - jumps.size() * 16) / 2;
+        int emiU = 0;
+        int emiV = -16;
+        for (String jump : jumps) {
+            boolean newGroup = !jump.contains(".");
+            int x = 2 + (newGroup ? 0 : 8);
+            if (jump.equals(RECIPE_FOREST$GROUP_ID)) {
+                addRenderableWidget(new RecipeForestWarningJumpButton(
+                        x, y,
+                        () -> ((ConfigScreen) (Object) this).jump(RECIPE_FOREST$GROUP_ID),
+                        () -> recipeForest$collisionRevision,
+                        RecipeForestTextures.FOREST_ICON_U, RecipeForestTextures.FOREST_ICON_V,
+                        "screen.emi_recipeforest.settings.title"));
+                y += RecipeForestTextures.ICON_SIZE;
+                continue;
+            }
+            if (jump.equals(RECIPE_FOREST$GROUP_ID + ".details")) {
+                addRenderableWidget(new RecipeForestJumpButton(
+                        x, y,
+                        () -> ((ConfigScreen) (Object) this).jump(RECIPE_FOREST$GROUP_ID + ".details"),
+                        RecipeForestTextures.DETAILS_ICON_U, RecipeForestTextures.DETAILS_ICON_V,
+                        "screen.emi_recipeforest.settings.details"));
+                y += RecipeForestTextures.ICON_SIZE;
+                continue;
+            }
+            if (newGroup) {
+                emiV += 16;
+                emiU = 0;
+            } else {
+                emiU += 16;
+            }
+            addRenderableWidget(new ConfigJumpButton(
+                    x, y, emiU, emiV,
+                    button -> ((ConfigScreen) (Object) this).jump(jump),
+                    List.of(EmiPort.translatable("config.emi.group." + jump.replace('-', '_')))));
+            y += 16;
         }
-        dev.setY(dev.getY() + 32);
-        addRenderableWidget(new RecipeForestJumpButton(2, recipeForestY,
-                () -> ((ConfigScreen) (Object) this).jump(RECIPE_FOREST$GROUP_ID),
-                () -> recipeForest$collisionRevision, 0, 0,
-                "screen.emi_recipeforest.settings.title", "screen.emi_recipeforest.settings.jump.tooltip"));
-        addRenderableWidget(new RecipeForestJumpButton(10, recipeForestY + 16,
-                () -> ((ConfigScreen) (Object) this).jump(RECIPE_FOREST$GROUP_ID + ".details"),
-                () -> 0, 16, 16,
-                "screen.emi_recipeforest.settings.details", "screen.emi_recipeforest.settings.details.jump.tooltip"));
+        ci.cancel();
     }
 
     @Unique
@@ -361,11 +391,9 @@ public abstract class ConfigScreenMixin extends Screen {
         recipeForest$revertClicked = button == 0 && activeBind == null && resetButton != null && resetButton.active
                 && resetButton.isMouseOver(mouseX, mouseY);
         if (recipeForest$revertClicked) {
-            ConfigRevertSync.restoreBeforeWidgetRefresh(() -> {
-                ForestBookmarks.restoreConfigState(recipeForest$originalConfig);
-                ForestBind.INSTANCE.reloadFromBookmarks();
-                recipeForest$collisionRevision++;
-            });
+            ForestBookmarks.restoreConfigState(recipeForest$originalConfig);
+            ForestBind.INSTANCE.reloadFromBookmarks();
+            recipeForest$collisionRevision++;
         }
         recipeForest$forestBindWasActive |= activeBind == ForestBind.INSTANCE;
         recipeForest$anyBindWasActive |= activeBind != null;
@@ -406,69 +434,78 @@ public abstract class ConfigScreenMixin extends Screen {
     }
 
     @Unique
-    private static final class RecipeForestJumpButton extends AbstractButton {
-        private final Runnable action;
-        private final IntSupplier collisionRevision;
-        private final int u;
-        private final int v;
-        private final String tooltipKey;
-        private int lastCollisionRevision = -1;
-        private List<ForestBind.Collision> collisions = List.of();
+    private static class RecipeForestJumpButton extends SizedButtonWidget {
+        protected final Component tooltipTitle;
 
-        private RecipeForestJumpButton(int x, int y, Runnable action, IntSupplier collisionRevision,
-                int u, int v, String titleKey, String tooltipKey) {
-            super(x, y, 16, 16, Component.translatable(titleKey));
-            this.action = action;
-            this.collisionRevision = collisionRevision;
-            this.u = u;
-            this.v = v;
-            this.tooltipKey = tooltipKey;
+        private RecipeForestJumpButton(int x, int y, Runnable action, int u, int v, String titleKey) {
+            this(x, y, action, u, v, Component.translatable(titleKey));
+        }
+
+        private RecipeForestJumpButton(int x, int y, Runnable action, int u, int v, Component title) {
+            super(x, y, RecipeForestTextures.ICON_SIZE, RecipeForestTextures.ICON_SIZE, u, v,
+                    () -> true, button -> action.run(), List.of(title));
+            this.tooltipTitle = title;
+            this.texture = RecipeForestTextures.WIDGETS;
         }
 
         @Override
-        public void onPress() {
-            action.run();
+        protected int getV(int mouseX, int mouseY) {
+            return this.v;
+        }
+
+        protected boolean hasWarning() {
+            return false;
         }
 
         @Override
-        protected void updateWidgetNarration(NarrationElementOutput output) {
-            defaultButtonNarrationText(output);
-        }
-
-        @Override
-        protected void renderWidget(GuiGraphics raw, int mouseX, int mouseY, float delta) {
-            refreshCollisions();
+        public void renderWidget(GuiGraphics raw, int mouseX, int mouseY, float delta) {
             EmiDrawContext context = EmiDrawContext.wrap(raw);
-            if (!collisions.isEmpty()) {
+            if (hasWarning()) {
                 context.setColor(1, 0.65f, 0.2f);
             } else if (isMouseOver(mouseX, mouseY)) {
                 context.setColor(0.5f, 0.6f, 1f);
             }
             context.push();
             context.matrices().translate(0, 0, 100);
-            context.drawTexture(RECIPE_FOREST$WIDGETS, getX(), getY(), 0, u, v, 16, 16, 64, 32);
+            super.renderWidget(raw, mouseX, mouseY, delta);
             context.pop();
             context.resetColor();
+        }
+    }
 
-            if (isMouseOver(mouseX, mouseY)) {
-                List<ClientTooltipComponent> tooltip = new ArrayList<>();
-                tooltip.add(ClientTooltipComponent.create(getMessage().getVisualOrderText()));
-                tooltip.addAll(recipeForest$tooltip(tooltipKey));
-                for (ForestBind.Collision collision : collisions) {
-                    tooltip.add(ClientTooltipComponent.create(Component.translatable(
-                            "screen.emi_recipeforest.settings.forest_key.override", collision.translatedName())
-                            .withStyle(ChatFormatting.GOLD).getVisualOrderText()));
-                }
-                context.push();
-                RenderSystem.disableDepthTest();
-                EmiRenderHelper.drawTooltip(Minecraft.getInstance().screen, context, tooltip, mouseX, mouseY);
-                RenderSystem.enableDepthTest();
-                context.pop();
+    @Unique
+    private static final class RecipeForestWarningJumpButton extends RecipeForestJumpButton {
+        private final IntSupplier collisionRevisionSupplier;
+        private int lastCollisionRevision = -1;
+        private List<ForestBind.Collision> collisions = List.of();
+
+        private RecipeForestWarningJumpButton(int x, int y, Runnable action,
+                IntSupplier collisionRevisionSupplier, int u, int v, String titleKey) {
+            super(x, y, action, u, v, titleKey);
+            this.collisionRevisionSupplier = collisionRevisionSupplier;
+            this.text = this::tooltip;
+        }
+
+        @Override
+        protected boolean hasWarning() {
+            refreshCollisions();
+            return !collisions.isEmpty();
+        }
+
+        private List<Component> tooltip() {
+            refreshCollisions();
+            List<Component> tooltip = new ArrayList<>(1 + collisions.size());
+            tooltip.add(tooltipTitle);
+            for (ForestBind.Collision collision : collisions) {
+                tooltip.add(Component.translatable(
+                        "screen.emi_recipeforest.settings.forest_key.override", collision.translatedName())
+                        .withStyle(ChatFormatting.GOLD));
             }
+            return tooltip;
         }
 
         private void refreshCollisions() {
-            int revision = collisionRevision.getAsInt();
+            int revision = collisionRevisionSupplier.getAsInt();
             if (revision != lastCollisionRevision) {
                 lastCollisionRevision = revision;
                 collisions = ForestBind.INSTANCE.getCollisions();
@@ -478,23 +515,23 @@ public abstract class ConfigScreenMixin extends Screen {
 
     @Unique
     private static final class RecipeForestBindEntry extends EmiBindWidget {
-        private final IntSupplier collisionRevision;
+        private final IntSupplier collisionRevisionSupplier;
         private int lastCollisionRevision = -1;
         private List<ForestBind.Collision> collisions = List.of();
         private int statusX;
         private int statusY;
 
         private RecipeForestBindEntry(ConfigScreen screen, Supplier<String> currentSearch,
-                IntSupplier collisionRevision) {
+                IntSupplier collisionRevisionSupplier) {
             super(screen, recipeForest$tooltip("screen.emi_recipeforest.settings.forest_key.tooltip"), currentSearch,
                     ForestBind.INSTANCE);
-            this.collisionRevision = collisionRevision;
+            this.collisionRevisionSupplier = collisionRevisionSupplier;
         }
 
         @Override
         public void update(int y, int x, int width, int height) {
             super.update(y, x, width, height);
-            int revision = collisionRevision.getAsInt();
+            int revision = collisionRevisionSupplier.getAsInt();
             if (revision != lastCollisionRevision) {
                 lastCollisionRevision = revision;
                 collisions = ForestBind.INSTANCE.getCollisions();
@@ -510,7 +547,9 @@ public abstract class ConfigScreenMixin extends Screen {
             if (!collisions.isEmpty()) {
                 EmiDrawContext context = EmiDrawContext.wrap(raw);
                 context.setColor(1, 0.65f, 0.2f);
-                context.drawTexture(RECIPE_FOREST$WIDGETS, statusX, statusY, 0, 0, 16, 16, 16, 64, 32);
+                context.drawTexture(RecipeForestTextures.WIDGETS, statusX, statusY,
+                        RecipeForestTextures.FOREST_ICON_U, RecipeForestTextures.FOREST_ICON_V,
+                        RecipeForestTextures.ICON_SIZE, RecipeForestTextures.ICON_SIZE);
                 context.resetColor();
             }
         }
