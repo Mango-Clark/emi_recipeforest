@@ -34,6 +34,7 @@ import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ConfigStat
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.RootLayout;
 import io.github.mango_clark.emirecipeforest.input.ForestBind;
+import io.github.mango_clark.emirecipeforest.screen.ConfigRevertSync;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -359,6 +360,13 @@ public abstract class ConfigScreenMixin extends Screen {
             CallbackInfoReturnable<Boolean> cir) {
         recipeForest$revertClicked = button == 0 && activeBind == null && resetButton != null && resetButton.active
                 && resetButton.isMouseOver(mouseX, mouseY);
+        if (recipeForest$revertClicked) {
+            ConfigRevertSync.restoreBeforeWidgetRefresh(() -> {
+                ForestBookmarks.restoreConfigState(recipeForest$originalConfig);
+                ForestBind.INSTANCE.reloadFromBookmarks();
+                recipeForest$collisionRevision++;
+            });
+        }
         recipeForest$forestBindWasActive |= activeBind == ForestBind.INSTANCE;
         recipeForest$anyBindWasActive |= activeBind != null;
     }
@@ -368,9 +376,6 @@ public abstract class ConfigScreenMixin extends Screen {
             CallbackInfoReturnable<Boolean> cir) {
         if (recipeForest$revertClicked) {
             recipeForest$revertClicked = false;
-            ForestBookmarks.restoreConfigState(recipeForest$originalConfig);
-            ForestBind.INSTANCE.reloadFromBookmarks();
-            recipeForest$collisionRevision++;
             ((ConfigScreen) (Object) this).updateChanges();
         }
         recipeForest$persistFinishedForestBind();
