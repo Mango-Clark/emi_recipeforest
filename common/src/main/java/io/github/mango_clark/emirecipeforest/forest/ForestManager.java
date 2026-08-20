@@ -331,6 +331,15 @@ public final class ForestManager {
         synchronizeSelectedTree();
     }
 
+    /**
+     * Reports whether a completed EMI reload still has forest state to restore.
+     *
+     * @return whether a reload snapshot is pending
+     */
+    public static synchronized boolean hasPendingRecipeReload() {
+        return reloadSnapshot != null;
+    }
+
     private static void clearLiveState() {
         cancelPendingResolution();
         TREES.clear();
