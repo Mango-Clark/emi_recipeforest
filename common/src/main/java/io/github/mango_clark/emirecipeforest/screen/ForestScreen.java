@@ -11,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
@@ -35,7 +36,6 @@ import dev.emi.emi.api.recipe.EmiResolutionRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.widget.Bounds;
-import dev.emi.emi.bom.BoM;
 import dev.emi.emi.bom.ChanceMaterialCost;
 import dev.emi.emi.bom.ChanceState;
 import dev.emi.emi.bom.FlatMaterialCost;
@@ -65,6 +65,7 @@ import io.github.mango_clark.emirecipeforest.forest.ForestCosts;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay.DisplayMode;
+import io.github.mango_clark.emirecipeforest.mixin.EmiApiMixin;
 
 /** Multi-root replacement for EMI's recipe tree screen. */
 public class ForestScreen extends BoMScreen {
@@ -85,7 +86,6 @@ public class ForestScreen extends BoMScreen {
 	private static final int ROOT_LIST_SCROLLBAR_WIDTH = 4;
 	private static final ResourceLocation RECIPE_FOREST_WIDGETS = EmiPort.id("emi_recipeforest",
 		"textures/gui/widgets.png");
-	private static final ThreadLocal<Boolean> OPENING_FOREST = ThreadLocal.withInitial(() -> false);
 	private static StackBatcher batcher = new StackBatcher();
 	private static int zoom = 0;
 	private Bounds batches = new Bounds(-24, -50, 48, 26);
@@ -123,23 +123,20 @@ public class ForestScreen extends BoMScreen {
 		super(old);
 	}
 
-	/** Opens the forest through EMI's BoM screen factory while preserving its handled-screen context. */
+	/** Opens the forest through EMI's native handled-screen and history lifecycle. */
 	public static void open() {
-		OPENING_FOREST.set(true);
-		try {
-			EmiApi.viewRecipeTree();
-		} finally {
-			OPENING_FOREST.remove();
+		Minecraft client = Minecraft.getInstance();
+		if (client.screen instanceof ForestScreen) {
+			return;
 		}
-	}
-
-	/**
-	 * Reports the synchronous factory override requested by {@link #open()}.
-	 *
-	 * @return whether EMI should construct a forest screen
-	 */
-	public static boolean isForestOpenRequested() {
-		return OPENING_FOREST.get();
+		if (client.screen == null && client.player != null) {
+			client.setScreen(new InventoryScreen(client.player));
+		}
+		AbstractContainerScreen<?> handled = EmiApi.getHandledScreen();
+		if (handled != null) {
+			EmiApiMixin.recipeForest$pushHistory();
+			client.setScreen(new ForestScreen(handled));
+		}
 	}
 
 	public void init() {
@@ -209,7 +206,7 @@ public class ForestScreen extends BoMScreen {
 			int costX = 0;
 			for (FlatMaterialCost node : treeCosts) {
 				Cost cost = new Cost(node, costX, cy, false);
-				if (BoM.craftingMode) {
+				if (ForestManager.isCraftingMode()) {
 					if (node instanceof ChanceMaterialCost cmc) {
 						if (!chanceProgressCosts.containsKey(node.ingredient)) {
 							cost.alreadyDone = node.getEffectiveAmount();
@@ -390,7 +387,7 @@ public class ForestScreen extends BoMScreen {
 		view.scale(scale, scale, 1);
 		view.translate(offX, offY, 0);
 		EmiPort.applyModelViewMatrix();
-		if (BoM.tree != null) {
+		if (selectedTree != null) {
 			batcher.begin(0, 0, 0);
 			int cy = nodeHeight * NODE_VERTICAL_SPACING * 2;
 			context.drawCenteredText(EmiPort.translatable("emi.total_cost"), 0, cy - 16);
@@ -407,13 +404,14 @@ public class ForestScreen extends BoMScreen {
 			if (batches.contains(mx, my)) {
 				color = 0xff8099ff;
 			}
-			context.drawTextWithShadow(EmiPort.literal("x" + BoM.tree.batches),
+			context.drawTextWithShadow(EmiPort.literal("x" + selectedTree.batches),
 					batches.x() + 6, batches.y() + batches.height() / 2 - 4, color);
 
 			if (mode.contains(mx, my)) {
 				context.setColor(0.5f, 0.6f, 1f, 1f);
 			}
-			context.drawTexture(EmiRenderHelper.WIDGETS, mode.x(), mode.y(), BoM.craftingMode ? 16 : 0, 146, mode.width(), mode.height());
+			context.drawTexture(EmiRenderHelper.WIDGETS, mode.x(), mode.y(),
+				ForestManager.isCraftingMode() ? 16 : 0, 146, mode.width(), mode.height());
 			context.setColor(1f, 1f, 1f, 1f);
 			batcher.draw();
 			// Amounts deliberately render after the icon batch so they can never be obscured.
@@ -448,15 +446,15 @@ public class ForestScreen extends BoMScreen {
 		Hover hover = forest$getHoveredStack(mouseX, mouseY);
 		if (hover != null) {
 			hover.drawTooltip(this, context, mouseX, mouseY);
-		} else if (!panelHovered && BoM.tree != null && batches.contains(mx, my)) {
+		} else if (!panelHovered && selectedTree != null && batches.contains(mx, my)) {
 			List<ClientTooltipComponent> list = Lists.newArrayList();
-			list.addAll(EmiTooltip.splitTranslate("tooltip.emi.bom.batch_size", BoM.tree.batches));
+			list.addAll(EmiTooltip.splitTranslate("tooltip.emi.bom.batch_size", selectedTree.batches));
 			list.addAll(EmiTooltip.splitTranslate("tooltip.emi.bom.batch_size.ideal", EmiPort.literal("Left Click")));
 			list.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.batch.help"));
 			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
-		} else if (!panelHovered && BoM.tree != null && mode.contains(mx, my)) {
-			String key = BoM.craftingMode ? "tooltip.emi.bom.mode.craft" : "tooltip.emi.bom.mode.view";
-			List<ClientTooltipComponent> list = EmiTooltip.splitTranslate(key, BoM.tree.batches);
+		} else if (!panelHovered && selectedTree != null && mode.contains(mx, my)) {
+			String key = ForestManager.isCraftingMode() ? "tooltip.emi.bom.mode.craft" : "tooltip.emi.bom.mode.view";
+			List<ClientTooltipComponent> list = EmiTooltip.splitTranslate(key, selectedTree.batches);
 			EmiRenderHelper.drawTooltip(this, context, list, mouseX, mouseY);
 		} else if (help.contains(mouseX, mouseY)) {
 			List<ClientTooltipComponent> list = Lists.newArrayList(
@@ -931,8 +929,8 @@ public class ForestScreen extends BoMScreen {
 	}
 
 	private void applyResolution(Hover hover, EmiIngredient ingredient, EmiRecipe recipe, ResolutionScope forestScope) {
-		if (forestScope == null && hover.node != null && BoM.tree != null) {
-			BoM.tree.addResolution(ingredient, recipe);
+		if (forestScope == null && hover.node != null && ForestManager.getSelectedTree() != null) {
+			ForestManager.addResolution(ingredient, recipe, ResolutionScope.SELECTED_ROOT);
 		} else if (forestScope != null) {
 			ForestManager.addResolution(ingredient, recipe, forestScope);
 		}
@@ -1012,7 +1010,7 @@ public class ForestScreen extends BoMScreen {
 			Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
 			ForestManager.toggleCraftingMode();
 			recalculateTree();
-		} else if (batches.contains(mx, my) && BoM.tree != null) {
+		} else if (batches.contains(mx, my) && ForestManager.getSelectedTree() != null) {
 			boolean changed = false;
 			for (MaterialTree tree : batchTargets()) {
 				long ideal = tree.cost.getIdealBatch(tree.goal, 1, 1);
@@ -1163,7 +1161,7 @@ public class ForestScreen extends BoMScreen {
 
 	private List<MaterialTree> batchTargets() {
 		return EmiInput.isAltDown() ? ForestManager.getTrees()
-			: BoM.tree == null ? List.of() : List.of(BoM.tree);
+			: ForestManager.getSelectedTree() == null ? List.of() : List.of(ForestManager.getSelectedTree());
 	}
 
 	@Override
@@ -1194,7 +1192,7 @@ public class ForestScreen extends BoMScreen {
 		float scale = getScale();
 		int mx = (int) ((mouseX - contentCenterX()) / scale - offX);
 		int my = (int) ((mouseY - contentCenterY()) / scale - offY);
-		if (BoM.tree != null && batches.contains(mx, my)) {
+		if (ForestManager.getSelectedTree() != null && batches.contains(mx, my)) {
 			for (MaterialTree tree : batchTargets()) {
 				adjustBatch(tree, (long) amount);
 			}
@@ -1359,7 +1357,7 @@ public class ForestScreen extends BoMScreen {
 			} else {
 				totalText = amountText(cost.ingredient, adjusted, decomposed);
 			}
-			if (!remainder && BoM.craftingMode) {
+			if (!remainder && ForestManager.isCraftingMode()) {
 				long amount = alreadyDone;
 				if (amount < adjusted) {
 					Component doneText = amount == 0 ? EmiPort.literal("0")
@@ -1481,7 +1479,7 @@ public class ForestScreen extends BoMScreen {
 		if (cost.cost instanceof ChanceMaterialCost) {
 			total += font.width("≈");
 		}
-		if (!cost.remainder && BoM.craftingMode && cost.alreadyDone < adjusted) {
+		if (!cost.remainder && ForestManager.isCraftingMode() && cost.alreadyDone < adjusted) {
 			int done = cost.alreadyDone == 0 ? font.width("0")
 				: quantityIconWidth(quantityDisplay(cost.cost.ingredient, cost.alreadyDone));
 			total += done + font.width("/");
@@ -1496,7 +1494,7 @@ public class ForestScreen extends BoMScreen {
 			return false;
 		}
 		int cursor = cost.x + 16;
-		if (!cost.remainder && BoM.craftingMode && cost.alreadyDone < adjusted) {
+		if (!cost.remainder && ForestManager.isCraftingMode() && cost.alreadyDone < adjusted) {
 			QuantityDisplay done = quantityDisplay(cost.cost.ingredient, cost.alreadyDone);
 			if (done == null || quantityIconWidth(done) == 0) {
 				context.drawTextWithShadow(EmiPort.literal("0"), cursor, cost.y + 7, 0xFFFF5555);
@@ -1699,7 +1697,7 @@ public class ForestScreen extends BoMScreen {
 			if (chanced) {
 				context.setColor(0.8f, 0.6f, 0.1f, 1f);
 			}
-			if (BoM.craftingMode) {
+			if (ForestManager.isCraftingMode()) {
 				if (node.progress == ProgressState.COMPLETED) {
 					context.setColor(0.1f, 0.8f, 0.5f, 1f);
 				} else if (node.progress == ProgressState.PARTIAL) {
