@@ -12,6 +12,7 @@
     "ConfigEntryWidgetMixin",
     "EmiBindWidgetAccessor",
     "EmiApiMixin",
+    "RecipeButtonWidgetMixin",
     "RecipeTreeButtonWidgetMixin",
     "EmiReloadManagerMixin",
     "EmiFavoritesMixin",

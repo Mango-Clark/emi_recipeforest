@@ -142,26 +142,6 @@ class ForestBehaviorTest {
     }
 
     @Test
-    void configRevertRestoresRecipeForestBeforeWidgetRefresh() throws Exception {
-        Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
-        Object original = call(bookmarks, "captureConfigState", types());
-        call(bookmarks, "setBoxEnabled", types(boolean.class), false);
-
-        Class<?> sync = runtime.type("io.github.mango_clark.emirecipeforest.screen.ConfigRevertSync");
-        call(sync, "restoreBeforeWidgetRefresh", types(Runnable.class),
-                (Runnable) () -> {
-                    try {
-                        call(bookmarks, "restoreConfigState", types(original.getClass()), original);
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-
-        boolean widgetValue = (boolean) call(bookmarks, "isBoxEnabled", types());
-        assertTrue(widgetValue);
-    }
-
-    @Test
     void movingRootsPreservesOrderAndSelectedTreeIdentity() throws Exception {
         Object first = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"),
                 runtime.recipe("test:first", runtime.stack("first", 1), List.of()));

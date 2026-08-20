@@ -51,8 +51,13 @@ def emiCompatibilityContracts = [
         ],
         'dev.emi.emi.widget.RecipeTreeButtonWidget': [
                 [token: 'RecipeTreeButtonWidget(', descriptor: '(IILdev/emi/emi/api/recipe/EmiRecipe;)V', access: 'public'],
+                [token: ' getTextureOffset(', descriptor: '(II)I', access: 'public'],
                 [token: ' mouseClicked(', descriptor: '(III)Z', access: 'public'],
                 [token: ' getTooltip(', descriptor: '(II)Ljava/util/List;', access: 'public']
+        ],
+        'dev.emi.emi.widget.RecipeButtonWidget': [
+                [token: ' recipe;', descriptor: 'Ldev/emi/emi/api/recipe/EmiRecipe;', access: 'protected final'],
+                [token: ' render(', descriptor: '(Lnet/minecraft/client/gui/GuiGraphics;IIF)V', access: 'public']
         ],
         'dev.emi.emi.runtime.EmiReloadManager': [
                 [token: ' clear(', descriptor: '()V', access: 'public static'],
@@ -71,10 +76,13 @@ def emiCompatibilityContracts = [
         'dev.emi.emi.screen.ConfigScreen': [
                 [token: ' list;', descriptor: 'Ldev/emi/emi/screen/widget/config/ListWidget;', access: 'public'],
                 [token: ' activeBind;', descriptor: 'Ldev/emi/emi/input/EmiBind;', access: 'public'],
+                [token: ' originalConfig;', descriptor: 'Ljava/lang/String;', access: 'public'],
+                [token: ' resetButton;', descriptor: 'Lnet/minecraft/client/gui/components/Button;', access: 'public'],
                 [token: ' search;', descriptor: 'Ldev/emi/emi/screen/widget/config/ConfigSearch;', access: 'private'],
                 [token: ' init(', descriptor: '()V', access: 'protected'],
                 [token: ' addJumpButtons(', descriptor: '()V', access: 'private'],
                 [token: ' jump(', descriptor: '(Ljava/lang/String;)V', access: 'public'],
+                [token: ' updateChanges(', descriptor: '()V', access: 'public'],
                 [token: ' mouseClicked(', descriptor: '(DDI)Z', access: 'public'],
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public'],
                 [token: ' keyReleased(', descriptor: '(III)Z', access: 'public']
@@ -106,7 +114,9 @@ def emiCompatibilityContracts = [
         'dev.emi.emi.screen.widget.config.ConfigSearch': [
                 [token: ' getSearch(', descriptor: '()Ljava/lang/String;', access: 'public']
         ],
-        'dev.emi.emi.screen.widget.config.ConfigJumpButton': [],
+        'dev.emi.emi.screen.widget.config.ConfigJumpButton': [
+                [token: 'ConfigJumpButton(', descriptor: '(IIIILnet/minecraft/client/gui/components/Button$OnPress;Ljava/util/List;)V', access: 'public']
+        ],
         'dev.emi.emi.screen.widget.config.EmiBindWidget': [
                 [token: 'EmiBindWidget(', descriptor: '(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Supplier;Ldev/emi/emi/input/EmiBind;)V', access: 'public'],
                 [token: ' update(', descriptor: '(IIII)V', access: 'public'],
@@ -136,7 +146,8 @@ def emiCompatibilityContracts = [
         'dev.emi.emi.api.EmiApi': [
                 [token: ' viewRecipeTree(', descriptor: '()V', access: 'public static'],
                 [token: ' getHandledScreen(', descriptor: '()Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;', access: 'public static'],
-                [token: ' getRecipeManager(', descriptor: '()Ldev/emi/emi/api/recipe/EmiRecipeManager;', access: 'public static']
+                [token: ' getRecipeManager(', descriptor: '()Ldev/emi/emi/api/recipe/EmiRecipeManager;', access: 'public static'],
+                [token: ' push(', descriptor: '()V', access: 'private static']
         ],
         'dev.emi.emi.api.recipe.EmiRecipeManager': [
                 [token: ' getRecipesByOutput(', descriptor: '(Ldev/emi/emi/api/stack/EmiStack;)Ljava/util/List;', access: 'public'],
@@ -172,7 +183,8 @@ def emiCompatibilityContracts = [
                 [token: ' old;', descriptor: 'Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;', access: 'public']
         ],
         'dev.emi.emi.screen.widget.SizedButtonWidget': [
-                [token: 'SizedButtonWidget(', descriptor: '(IIIIIILjava/util/function/BooleanSupplier;Lnet/minecraft/client/gui/components/Button$OnPress;Ljava/util/List;)V', access: 'public']
+                [token: 'SizedButtonWidget(', descriptor: '(IIIIIILjava/util/function/BooleanSupplier;Lnet/minecraft/client/gui/components/Button$OnPress;Ljava/util/List;)V', access: 'public'],
+                [token: ' texture;', descriptor: 'Lnet/minecraft/resources/ResourceLocation;', access: 'protected']
         ],
         'dev.emi.emi.screen.EmiScreenManager': [
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public static'],
@@ -289,8 +301,9 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                 if (owner == 'dev.emi.emi.screen.widget.config.ConfigJumpButton') {
                     def declaration = lines.find { it.startsWith('public ') && it.contains(" ${owner} ") }
                     if (declaration == null
+                            || declaration.contains(' final class ')
                             || !declaration.contains(' extends dev.emi.emi.screen.widget.SizedButtonWidget ')) {
-                        throw new GradleException("EMI ${version}: ${owner} must extend SizedButtonWidget")
+                        throw new GradleException("EMI ${version}: ${owner} must remain a non-final SizedButtonWidget")
                     }
                 }
                 members.each { member ->
@@ -308,34 +321,6 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                                 + " ${member.token.trim()} descriptor ${member.descriptor}")
                     }
                 }
-            }
-            def emiApiBytecode = new ByteArrayOutputStream()
-            def emiApiResult = project.exec {
-                commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-c', '-s',
-                        'dev.emi.emi.api.EmiApi'
-                standardOutput = emiApiBytecode
-                errorOutput = emiApiBytecode
-                ignoreExitValue = true
-            }
-            if (emiApiResult.exitValue != 0) {
-                throw new GradleException("EMI ${version}: unable to inspect EmiApi bytecode: "
-                        + emiApiBytecode.toString('UTF-8'))
-            }
-            def apiLines = emiApiBytecode.toString('UTF-8').readLines()
-            def viewTreeStart = apiLines.findIndexOf { it.trim() == 'public static void viewRecipeTree();' }
-            def viewTreeEnd = viewTreeStart < 0 ? -1 : ((viewTreeStart + 1)..<apiLines.size()).find {
-                def line = apiLines[it]
-                line.startsWith('  ') && !line.startsWith('    ') && line.trim().endsWith(';')
-            }
-            if (viewTreeEnd == null || viewTreeEnd < 0) {
-                viewTreeEnd = apiLines.size()
-            }
-            def newBoMScreenCount = viewTreeStart < 0 ? 0 : apiLines.subList(viewTreeStart, viewTreeEnd).count {
-                it.contains('new') && it.contains('// class dev/emi/emi/screen/BoMScreen')
-            }
-            if (newBoMScreenCount != 2) {
-                throw new GradleException("EMI ${version}: EmiApi.viewRecipeTree()V expected exactly two NEW "
-                        + "dev/emi/emi/screen/BoMScreen sites, found ${newBoMScreenCount}")
             }
             def screenManagerBytecode = new ByteArrayOutputStream()
             def screenManagerResult = project.exec {
@@ -426,6 +411,49 @@ tasks.register('verifyEmiCompatibilityMatrix') {
             if (newJumpButtonCount != 1) {
                 throw new GradleException("EMI ${version}: ConfigScreen.addJumpButtons()V expected exactly one NEW "
                         + "ConfigJumpButton site, found ${newJumpButtonCount}")
+            }
+            def logicalHeightCount = jumpStart < 0 ? 0 : configLines.subList(jumpStart, jumpEnd).count {
+                it.contains('invokevirtual')
+                        && it.contains('// Method dev/emi/emi/screen/widget/config/ListWidget.getLogicalHeight:()I')
+            }
+            if (logicalHeightCount != 2) {
+                throw new GradleException("EMI ${version}: ConfigScreen.addJumpButtons()V expected exactly two "
+                        + "ListWidget.getLogicalHeight()I calls, found ${logicalHeightCount}")
+            }
+            def initStart = configLines.findIndexOf { it.trim() == 'protected void init();' }
+            def initEnd = initStart < 0 ? -1 : ((initStart + 1)..<configLines.size()).find {
+                def line = configLines[it]
+                line.startsWith('  ') && !line.startsWith('    ') && line.trim().endsWith(';')
+            }
+            if (initEnd == null || initEnd < 0) {
+                initEnd = configLines.size()
+            }
+            def newButtonCount = initStart < 0 ? 0 : configLines.subList(initStart, initEnd).count {
+                it.contains('invokestatic') && it.contains('// Method dev/emi/emi/EmiPort.newButton:')
+            }
+            if (newButtonCount != 3) {
+                throw new GradleException("EMI ${version}: ConfigScreen.init()V expected exactly three "
+                        + "EmiPort.newButton calls, found ${newButtonCount}")
+            }
+            def recipeButtonBytecode = new ByteArrayOutputStream()
+            def recipeButtonResult = project.exec {
+                commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-c', '-s',
+                        'dev.emi.emi.widget.RecipeButtonWidget'
+                standardOutput = recipeButtonBytecode
+                errorOutput = recipeButtonBytecode
+                ignoreExitValue = true
+            }
+            if (recipeButtonResult.exitValue != 0) {
+                throw new GradleException("EMI ${version}: unable to inspect RecipeButtonWidget bytecode: "
+                        + recipeButtonBytecode.toString('UTF-8'))
+            }
+            def recipeButtonLines = recipeButtonBytecode.toString('UTF-8').readLines()
+            def drawTextureCount = recipeButtonLines.count {
+                it.contains('invokevirtual') && it.contains('// Method dev/emi/emi/runtime/EmiDrawContext.drawTexture:')
+            }
+            if (drawTextureCount != 1) {
+                throw new GradleException("EMI ${version}: RecipeButtonWidget expected exactly one native "
+                        + "EmiDrawContext.drawTexture call, found ${drawTextureCount}")
             }
             logger.lifecycle("Verified EMI ${version}")
         }

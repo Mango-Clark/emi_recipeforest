@@ -105,8 +105,16 @@ public final class EmiCompatibility {
             }
             case "dev.emi.emi.widget.RecipeTreeButtonWidget" -> {
                 requireMethod(targetClass, "<init>", "(IILdev/emi/emi/api/recipe/EmiRecipe;)V", false, missing);
+                requireMethod(targetClass, "getTextureOffset", "(II)I", false, missing);
                 requireMethod(targetClass, "mouseClicked", "(III)Z", false, missing);
                 requireMethod(targetClass, "getTooltip", "(II)Ljava/util/List;", false, missing);
+            }
+            case "dev.emi.emi.widget.RecipeButtonWidget" -> {
+                requireProtectedField(targetClass, "recipe", "Ldev/emi/emi/api/recipe/EmiRecipe;", false, missing);
+                requireMethod(targetClass, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V", false, missing);
+                requireMethodInvocations(targetClass, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
+                        Opcodes.INVOKEVIRTUAL, "dev/emi/emi/runtime/EmiDrawContext", "drawTexture",
+                        "(Lnet/minecraft/resources/ResourceLocation;IIIIIIIIII)V", 1, missing);
             }
             case "dev.emi.emi.runtime.EmiReloadManager" -> {
                 requireMethod(targetClass, "clear", "()V", true, missing);
@@ -130,12 +138,24 @@ public final class EmiCompatibility {
                         "Ldev/emi/emi/screen/widget/config/ConfigSearch;", false, missing);
                 requireProtectedMethod(targetClass, "init", "()V", false, missing);
                 requirePrivateMethod(targetClass, "addJumpButtons", "()V", false, missing);
+                requireField(targetClass, "originalConfig", "Ljava/lang/String;", false, missing);
+                requireField(targetClass, "resetButton", "Lnet/minecraft/client/gui/components/Button;", false,
+                        missing);
                 requireMethod(targetClass, "jump", "(Ljava/lang/String;)V", false, missing);
+                requireMethod(targetClass, "updateChanges", "()V", false, missing);
                 requireMethod(targetClass, "mouseClicked", "(DDI)Z", false, missing);
                 requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
                 requireMethod(targetClass, "keyReleased", "(III)Z", false, missing);
                 requireNewInstructions(targetClass, "addJumpButtons", "()V",
                         "dev/emi/emi/screen/widget/config/ConfigJumpButton", 1, missing);
+                requireMethodInvocations(targetClass, "addJumpButtons", "()V", Opcodes.INVOKEVIRTUAL,
+                        "dev/emi/emi/screen/widget/config/ListWidget", "getLogicalHeight", "()I", 2, missing);
+                requireMethodInvocations(targetClass, "init", "()V", Opcodes.INVOKESTATIC,
+                        "dev/emi/emi/EmiPort", "newButton",
+                        "(IIIILnet/minecraft/network/chat/Component;"
+                                + "Lnet/minecraft/client/gui/components/Button$OnPress;)"
+                                + "Lnet/minecraft/client/gui/components/Button;",
+                        3, missing);
             }
             case "dev.emi.emi.screen.RecipeScreen" -> {
                 requireMethod(targetClass, "<init>",
@@ -155,8 +175,7 @@ public final class EmiCompatibility {
                         "()Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;", true, missing);
                 requireMethod(targetClass, "getRecipeManager",
                         "()Ldev/emi/emi/api/recipe/EmiRecipeManager;", true, missing);
-                requireNewInstructions(targetClass, "viewRecipeTree", "()V",
-                        "dev/emi/emi/screen/BoMScreen", 2, missing);
+                requirePrivateMethod(targetClass, "push", "()V", true, missing);
             }
             case "dev.emi.emi.screen.EmiScreenManager" -> {
                 requireMethod(targetClass, "keyPressed", "(III)Z", true, missing);
@@ -375,6 +394,22 @@ public final class EmiCompatibility {
                 + " [private]");
     }
 
+    private static void requireProtectedField(ClassNode owner, String name, String descriptor, boolean requireStatic,
+            List<String> missing) {
+        if (owner != null) {
+            for (FieldNode field : owner.fields) {
+                int visibility = field.access & (Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED | Opcodes.ACC_PRIVATE);
+                if (field.name.equals(name) && field.desc.equals(descriptor)
+                        && visibility == Opcodes.ACC_PROTECTED
+                        && ((field.access & Opcodes.ACC_STATIC) != 0) == requireStatic) {
+                    return;
+                }
+            }
+        }
+        missing.add((owner == null ? "<missing-class>" : owner.name) + '.' + name + ':' + descriptor
+                + " [protected]");
+    }
+
     private static void requireExtensibleClass(ClassNode owner, List<String> missing) {
         if (owner != null && (owner.access & (Opcodes.ACC_INTERFACE | Opcodes.ACC_FINAL)) == 0) {
             return;
@@ -426,6 +461,7 @@ public final class EmiCompatibility {
             ClassNode synthetic = readClass("dev/emi/emi/runtime/EmiFavorite$Synthetic", missing);
             ClassNode bomScreen = readClass("dev/emi/emi/screen/BoMScreen", missing);
             ClassNode sizedButton = readClass("dev/emi/emi/screen/widget/SizedButtonWidget", missing);
+            ClassNode recipeButton = readClass("dev/emi/emi/widget/RecipeButtonWidget", missing);
             ClassNode materialTree = readClass("dev/emi/emi/bom/MaterialTree", missing);
             ClassNode recipeScreen = readClass("dev/emi/emi/screen/RecipeScreen", missing);
             ClassNode reloadManager = readClass("dev/emi/emi/runtime/EmiReloadManager", missing);
@@ -487,6 +523,13 @@ public final class EmiCompatibility {
                     "(IIIIIILjava/util/function/BooleanSupplier;"
                             + "Lnet/minecraft/client/gui/components/Button$OnPress;Ljava/util/List;)V",
                     false, missing);
+            requireProtectedField(sizedButton, "texture", "Lnet/minecraft/resources/ResourceLocation;", false,
+                    missing);
+            requireProtectedField(recipeButton, "recipe", "Ldev/emi/emi/api/recipe/EmiRecipe;", false, missing);
+            requireMethod(recipeButton, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V", false, missing);
+            requireMethodInvocations(recipeButton, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
+                    Opcodes.INVOKEVIRTUAL, "dev/emi/emi/runtime/EmiDrawContext", "drawTexture",
+                    "(Lnet/minecraft/resources/ResourceLocation;IIIIIIIIII)V", 1, missing);
             requireMethod(materialTree, "<init>", "(Ldev/emi/emi/api/recipe/EmiRecipe;)V", false, missing);
             requireField(materialTree, "goal", "Ldev/emi/emi/bom/MaterialNode;", false, missing);
             requireField(materialTree, "resolutions", "Ljava/util/Map;", false, missing);
@@ -505,16 +548,28 @@ public final class EmiCompatibility {
             requireField(recipeScreen, "resolve", "Ldev/emi/emi/api/stack/EmiIngredient;", true, missing);
             requireField(configScreen, "list", "Ldev/emi/emi/screen/widget/config/ListWidget;", false, missing);
             requireField(configScreen, "activeBind", "Ldev/emi/emi/input/EmiBind;", false, missing);
+            requireField(configScreen, "originalConfig", "Ljava/lang/String;", false, missing);
+            requireField(configScreen, "resetButton", "Lnet/minecraft/client/gui/components/Button;", false,
+                    missing);
             requirePrivateField(configScreen, "search",
                     "Ldev/emi/emi/screen/widget/config/ConfigSearch;", false, missing);
             requireProtectedMethod(configScreen, "init", "()V", false, missing);
             requirePrivateMethod(configScreen, "addJumpButtons", "()V", false, missing);
             requireMethod(configScreen, "jump", "(Ljava/lang/String;)V", false, missing);
+            requireMethod(configScreen, "updateChanges", "()V", false, missing);
             requireMethod(configScreen, "mouseClicked", "(DDI)Z", false, missing);
             requireMethod(configScreen, "keyPressed", "(III)Z", false, missing);
             requireMethod(configScreen, "keyReleased", "(III)Z", false, missing);
             requireNewInstructions(configScreen, "addJumpButtons", "()V",
                     "dev/emi/emi/screen/widget/config/ConfigJumpButton", 1, missing);
+            requireMethodInvocations(configScreen, "addJumpButtons", "()V", Opcodes.INVOKEVIRTUAL,
+                    "dev/emi/emi/screen/widget/config/ListWidget", "getLogicalHeight", "()I", 2, missing);
+            requireMethodInvocations(configScreen, "init", "()V", Opcodes.INVOKESTATIC,
+                    "dev/emi/emi/EmiPort", "newButton",
+                    "(IIIILnet/minecraft/network/chat/Component;"
+                            + "Lnet/minecraft/client/gui/components/Button$OnPress;)"
+                            + "Lnet/minecraft/client/gui/components/Button;",
+                    3, missing);
             requireMethod(configEnumScreen, "<init>",
                     "(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Consumer;)V",
                     false, missing);
@@ -540,6 +595,9 @@ public final class EmiCompatibility {
             requireField(configEntry, "parentGroups", "Ljava/util/List;", false, missing);
             requireMethod(configSearch, "getSearch", "()Ljava/lang/String;", false, missing);
             requireSuperclass(configJumpButton, "dev/emi/emi/screen/widget/SizedButtonWidget", missing);
+            requireExtensibleClass(configJumpButton, missing);
+            requireMethod(configJumpButton, "<init>",
+                    "(IIIILnet/minecraft/client/gui/components/Button$OnPress;Ljava/util/List;)V", false, missing);
             requireExtensibleClass(bindWidget, missing);
             requireMethod(bindWidget, "<init>",
                     "(Ldev/emi/emi/screen/ConfigScreen;Ljava/util/List;Ljava/util/function/Supplier;"
@@ -608,6 +666,7 @@ public final class EmiCompatibility {
                     "()Ldev/emi/emi/api/recipe/EmiRecipe;", false, missing);
             requireMethod(stackInteraction, "getStack",
                     "()Ldev/emi/emi/api/stack/EmiIngredient;", false, missing);
+            requirePrivateMethod(emiApi, "push", "()V", true, missing);
             requireMethod(emiApi, "getRecipeManager",
                     "()Ldev/emi/emi/api/recipe/EmiRecipeManager;", true, missing);
             requireMethod(recipeManager, "getRecipesByOutput",
