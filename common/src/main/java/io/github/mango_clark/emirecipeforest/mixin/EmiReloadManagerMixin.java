@@ -24,7 +24,7 @@ public abstract class EmiReloadManagerMixin {
 
     @Inject(method = "isLoaded", at = @At("RETURN"))
     private static void recipeForest$restoreReloadedForest(CallbackInfoReturnable<Boolean> cir) {
-        if (cir.getReturnValueZ()) {
+        if (cir.getReturnValueZ() && ForestManager.hasPendingRecipeReload()) {
             recipeForest$runOnClientThreadAndWait(ForestManager::finishRecipeReload);
         }
     }

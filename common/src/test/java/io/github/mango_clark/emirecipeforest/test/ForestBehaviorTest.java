@@ -370,6 +370,7 @@ class ForestBehaviorTest {
 
         call(manager, "beginRecipeReload", types());
         assertTrue((boolean) call(manager, "isEmpty", types()));
+        assertTrue((boolean) call(manager, "hasPendingRecipeReload", types()));
 
         Object newDuplicate = runtime.recipe("reload:duplicate", runtime.stack("duplicate-new", 1),
                 List.of(runtime.stack("ingredient", 1)));
@@ -379,6 +380,7 @@ class ForestBehaviorTest {
         registerRecipe(newLast);
         registerRecipe(newResolution);
         call(manager, "finishRecipeReload", types());
+        assertFalse((boolean) call(manager, "hasPendingRecipeReload", types()));
 
         List<?> restored = (List<?>) call(manager, "getTrees", types());
         assertEquals(3, restored.size());
@@ -416,6 +418,7 @@ class ForestBehaviorTest {
         call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), oldRecipe);
         call(manager, "beginRecipeReload", types());
         call(manager, "clear", types());
+        assertFalse((boolean) call(manager, "hasPendingRecipeReload", types()));
 
         registerRecipe(runtime.recipe("reload:session-clear", runtime.stack("session-new", 1), List.of()));
         call(manager, "finishRecipeReload", types());
