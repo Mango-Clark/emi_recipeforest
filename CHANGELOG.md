@@ -29,6 +29,7 @@
 
 ### Fixed
 
+- EMI Config now opens and rebuilds without loading RecipeForest widgets from the reserved Mixin package.
 - Fabric and NeoForge clients now pass EMI 1.1.24 startup compatibility checks.
 - RecipeForest settings now participate in EMI's native Revert changes action and refresh with restored values.
 - Hovering EMI Help in the Forest screen no longer crashes when RecipeForest appends its guidance.
