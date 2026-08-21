@@ -4,11 +4,11 @@ import java.util.List;
 
 import dev.emi.emi.api.recipe.EmiRecipe;
 import dev.emi.emi.input.EmiInput;
+import dev.emi.emi.screen.tooltip.EmiTooltip;
 import dev.emi.emi.widget.RecipeButtonWidget;
 import dev.emi.emi.widget.RecipeTreeButtonWidget;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
-import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -35,8 +35,7 @@ public abstract class RecipeTreeButtonWidgetMixin extends RecipeButtonWidget {
     private void recipeForest$tooltip(int mouseX, int mouseY,
             CallbackInfoReturnable<List<ClientTooltipComponent>> cir) {
         if (!EmiInput.isShiftDown()) {
-            cir.setReturnValue(List.of(ClientTooltipComponent.create(
-                    Component.translatable("tooltip.emi_recipeforest.add_to_forest").getVisualOrderText())));
+            cir.setReturnValue(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.add_to_forest"));
         }
     }
 

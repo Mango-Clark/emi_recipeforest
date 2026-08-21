@@ -12,6 +12,7 @@ import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.runtime.EmiDrawContext;
 import dev.emi.emi.screen.ConfigEnumScreen;
 import dev.emi.emi.screen.ConfigScreen;
+import dev.emi.emi.screen.tooltip.EmiTooltip;
 import dev.emi.emi.screen.widget.config.BooleanWidget;
 import dev.emi.emi.screen.widget.config.ConfigEntryWidget;
 import dev.emi.emi.screen.widget.config.ConfigSearch;
@@ -295,8 +296,7 @@ public abstract class ConfigScreenMixin extends Screen {
             String key = "screen.emi_recipeforest.settings.resolution_scope."
                     + scope.name().toLowerCase(Locale.ROOT);
             entries.add(new ConfigEnumScreen.Entry<>(scope, Component.translatable(key),
-                    List.of(ClientTooltipComponent.create(
-                            Component.translatable(key + ".tooltip").getVisualOrderText()))));
+                    recipeForest$tooltip(key + ".tooltip")));
         }
         minecraft.setScreen(new ConfigEnumScreen<>((ConfigScreen) (Object) this, entries,
                 ForestBookmarks::setResolutionScope));
@@ -320,7 +320,8 @@ public abstract class ConfigScreenMixin extends Screen {
         for (E value : values) {
             String key = "screen.emi_recipeforest.settings." + setting + "."
                     + value.name().toLowerCase(Locale.ROOT);
-            entries.add(new ConfigEnumScreen.Entry<>(value, Component.translatable(key), List.of()));
+            entries.add(new ConfigEnumScreen.Entry<>(value, Component.translatable(key),
+                    recipeForest$tooltip(key + ".tooltip")));
         }
         minecraft.setScreen(new ConfigEnumScreen<>((ConfigScreen) (Object) this, entries, setter));
     }
@@ -397,7 +398,7 @@ public abstract class ConfigScreenMixin extends Screen {
 
     @Unique
     private static List<ClientTooltipComponent> recipeForest$tooltip(String key) {
-        return List.of(ClientTooltipComponent.create(Component.translatable(key).getVisualOrderText()));
+        return EmiTooltip.splitTranslate(key);
     }
 
     @Unique

@@ -25,6 +25,7 @@
 - Forest shortcuts now support up to four key, scan-code, or mouse bindings stored only in RecipeForest's versioned settings. Existing single-key settings migrate automatically, conflicts show an RF override indicator without changing EMI's config, and the original EMI shortcut still runs when no recipe can be added.
 - Alt quantity columns expand only while Alt is held; quantity and Recipe Forest icons share a unified atlas, and grid batches use compact, cell-fitting digits.
 - EMI compatibility is limited to versions 1.1.13 through 1.1.24 for Minecraft 1.21.1 and validated before mixins apply.
+- English and Korean descriptions now use structured, color-highlighted tooltips, with Korean terminology aligned to EMI's official localization.
 
 ### Fixed
 
