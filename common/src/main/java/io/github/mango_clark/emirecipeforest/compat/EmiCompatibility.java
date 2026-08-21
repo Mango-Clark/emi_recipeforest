@@ -151,6 +151,8 @@ public final class EmiCompatibility {
                         "dev/emi/emi/screen/widget/config/ConfigJumpButton", 1, missing);
                 requireMethodInvocations(targetClass, "addJumpButtons", "()V", Opcodes.INVOKEVIRTUAL,
                         "dev/emi/emi/screen/widget/config/ListWidget", "getLogicalHeight", "()I", 2, missing);
+                requireMethodInvocations(targetClass, "init", "()V", Opcodes.INVOKEVIRTUAL,
+                        "dev/emi/emi/screen/ConfigScreen", "addJumpButtons", "()V", 1, missing);
                 requireMethodInvocations(targetClass, "init", "()V", Opcodes.INVOKESTATIC,
                         "dev/emi/emi/EmiPort", "newButton",
                         "(IIIILnet/minecraft/network/chat/Component;"
@@ -595,6 +597,8 @@ public final class EmiCompatibility {
                     "dev/emi/emi/screen/widget/config/ConfigJumpButton", 1, missing);
             requireMethodInvocations(configScreen, "addJumpButtons", "()V", Opcodes.INVOKEVIRTUAL,
                     "dev/emi/emi/screen/widget/config/ListWidget", "getLogicalHeight", "()I", 2, missing);
+            requireMethodInvocations(configScreen, "init", "()V", Opcodes.INVOKEVIRTUAL,
+                    "dev/emi/emi/screen/ConfigScreen", "addJumpButtons", "()V", 1, missing);
             requireMethodInvocations(configScreen, "init", "()V", Opcodes.INVOKESTATIC,
                     "dev/emi/emi/EmiPort", "newButton",
                     "(IIIILnet/minecraft/network/chat/Component;"
