@@ -435,6 +435,21 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                 throw new GradleException("EMI ${version}: ConfigScreen.init()V expected exactly three "
                         + "EmiPort.newButton calls, found ${newButtonCount}")
             }
+            def changesStart = configLines.findIndexOf { it.trim() == 'public void updateChanges();' }
+            def changesEnd = changesStart < 0 ? -1 : ((changesStart + 1)..<configLines.size()).find {
+                def line = configLines[it]
+                line.startsWith('  ') && !line.startsWith('    ') && line.trim().endsWith(';')
+            }
+            if (changesEnd == null || changesEnd < 0) {
+                changesEnd = configLines.size()
+            }
+            def changesSeedCount = changesStart < 0 ? 0 : configLines.subList(changesStart, changesEnd).count {
+                it.contains('istore_3')
+            }
+            if (changesSeedCount != 1) {
+                throw new GradleException("EMI ${version}: ConfigScreen.updateChanges()V expected exactly one "
+                        + "ISTORE local 3 seed, found ${changesSeedCount}")
+            }
             def recipeButtonBytecode = new ByteArrayOutputStream()
             def recipeButtonResult = project.exec {
                 commandLine javap.absolutePath, '-classpath', jar.absolutePath, '-p', '-c', '-s',

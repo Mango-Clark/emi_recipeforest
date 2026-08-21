@@ -23,6 +23,7 @@ import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeInsnNode;
+import org.objectweb.asm.tree.VarInsnNode;
 
 /** Verifies the EMI implementation surface used by RecipeForest mixins. */
 public final class EmiCompatibility {
@@ -144,6 +145,7 @@ public final class EmiCompatibility {
                         missing);
                 requireMethod(targetClass, "jump", "(Ljava/lang/String;)V", false, missing);
                 requireMethod(targetClass, "updateChanges", "()V", false, missing);
+                requireVariableStores(targetClass, "updateChanges", "()V", 3, 1, missing);
                 requireMethod(targetClass, "mouseClicked", "(DDI)Z", false, missing);
                 requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
                 requireMethod(targetClass, "keyReleased", "(III)Z", false, missing);
@@ -373,6 +375,33 @@ public final class EmiCompatibility {
                 + " invocations");
     }
 
+    private static void requireVariableStores(ClassNode owner, String methodName, String methodDescriptor,
+            int variable, int expectedCount, List<String> missing) {
+        if (owner != null) {
+            for (MethodNode method : owner.methods) {
+                if (!method.name.equals(methodName) || !method.desc.equals(methodDescriptor)) {
+                    continue;
+                }
+                int count = 0;
+                for (var instruction : method.instructions) {
+                    if (instruction.getOpcode() == Opcodes.ISTORE
+                            && instruction instanceof VarInsnNode variableInstruction
+                            && variableInstruction.var == variable) {
+                        count++;
+                    }
+                }
+                if (count == expectedCount) {
+                    return;
+                }
+                missing.add(owner.name + '.' + methodName + methodDescriptor + " exactly " + expectedCount + ' '
+                        + "ISTORE local " + variable + " instructions (found " + count + ')');
+                return;
+            }
+        }
+        missing.add((owner == null ? "<missing-class>" : owner.name) + '.' + methodName + methodDescriptor
+                + " exactly " + expectedCount + " ISTORE local " + variable + " instructions");
+    }
+
     private static void requireFieldAccesses(ClassNode owner, String methodName, String methodDescriptor,
             int opcode, String targetOwner, String targetName, String targetDescriptor, int expectedCount,
             List<String> missing) {
@@ -590,6 +619,7 @@ public final class EmiCompatibility {
             requirePrivateMethod(configScreen, "addJumpButtons", "()V", false, missing);
             requireMethod(configScreen, "jump", "(Ljava/lang/String;)V", false, missing);
             requireMethod(configScreen, "updateChanges", "()V", false, missing);
+            requireVariableStores(configScreen, "updateChanges", "()V", 3, 1, missing);
             requireMethod(configScreen, "mouseClicked", "(DDI)Z", false, missing);
             requireMethod(configScreen, "keyPressed", "(III)Z", false, missing);
             requireMethod(configScreen, "keyReleased", "(III)Z", false, missing);
