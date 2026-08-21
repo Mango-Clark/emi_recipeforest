@@ -1,16 +1,14 @@
 package io.github.mango_clark.emirecipeforest.mixin;
 
-import dev.emi.emi.EmiPort;
 import dev.emi.emi.config.EmiConfig;
 import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.runtime.EmiDrawContext;
 import dev.emi.emi.screen.widget.config.ConfigEntryWidget;
 import dev.emi.emi.screen.widget.config.EmiBindWidget;
 import io.github.mango_clark.emirecipeforest.input.ForestBind;
+import io.github.mango_clark.emirecipeforest.screen.RecipeForestTextures;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -18,10 +16,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Marks overridden EMI tree bindings when they collide with the Forest binding. */
 @Mixin(value = ConfigEntryWidget.class, remap = false)
 public abstract class ConfigEntryWidgetMixin {
-    @Unique
-    private static final ResourceLocation RECIPE_FOREST$WIDGETS = EmiPort.id("emi_recipeforest",
-            "textures/gui/widgets.png");
-
     @Inject(method = "render", at = @At("RETURN"))
     private void recipeForest$renderOverrideMarker(GuiGraphics raw, int index, int y, int x, int width, int height,
             int mouseX, int mouseY, boolean hovered, float delta, CallbackInfo ci) {
@@ -39,7 +33,9 @@ public abstract class ConfigEntryWidgetMixin {
         }
         EmiDrawContext context = EmiDrawContext.wrap(raw);
         context.setColor(1, 0.65f, 0.2f);
-        context.drawTexture(RECIPE_FOREST$WIDGETS, x + width - 244, y + 2, 0, 0, 16, 16, 16, 64, 32);
+        context.drawTexture(RecipeForestTextures.WIDGETS, x + width - 244, y + 2,
+                RecipeForestTextures.FOREST_ICON_U, RecipeForestTextures.FOREST_ICON_V,
+                RecipeForestTextures.ICON_SIZE, RecipeForestTextures.ICON_SIZE);
         context.resetColor();
     }
 }
