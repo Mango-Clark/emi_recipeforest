@@ -16,7 +16,6 @@ import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
@@ -84,8 +83,6 @@ public class ForestScreen extends BoMScreen {
 	private static final int ROOT_LIST_CONTROL_GAP = 2;
 	private static final int ROOT_LIST_RIGHT_MARGIN = 3;
 	private static final int ROOT_LIST_SCROLLBAR_WIDTH = 4;
-	private static final ResourceLocation RECIPE_FOREST_WIDGETS = EmiPort.id("emi_recipeforest",
-		"textures/gui/widgets.png");
 	private static StackBatcher batcher = new StackBatcher();
 	private static int zoom = 0;
 	private Bounds batches = new Bounds(-24, -50, 48, 26);
@@ -508,7 +505,9 @@ public class ForestScreen extends BoMScreen {
 		if (!rootPanelHasContent()) {
 			return;
 		}
-		context.drawTexture(RECIPE_FOREST_WIDGETS, panelLeft + 4, panelTop + 5, 0, 0, 16, 16, 16, 64, 32);
+		context.drawTexture(RecipeForestTextures.WIDGETS, panelLeft + 4, panelTop + 5,
+			RecipeForestTextures.FOREST_ICON_U, RecipeForestTextures.FOREST_ICON_V,
+			RecipeForestTextures.ICON_SIZE, RecipeForestTextures.ICON_SIZE);
 		boolean toggleHovered = rootLayoutToggle.contains(mouseX, mouseY);
 		context.fill(rootLayoutToggle.x(), rootLayoutToggle.y(), rootLayoutToggle.width(),
 			rootLayoutToggle.height(), toggleHovered ? 0xFF8099FF : 0xFF555555);
@@ -1444,21 +1443,26 @@ public class ForestScreen extends BoMScreen {
 	private int renderQuantityIcons(EmiDrawContext context, int x, int y, QuantityDisplay display) {
 		int cursor = x;
 		if (display.hasBoxes()) {
-			cursor = renderQuantityUnit(context, cursor, y, 0, display.boxes(), 0);
+			cursor = renderQuantityUnit(context, cursor, y, RecipeForestTextures.BOX_ICON_U,
+				display.boxes(), 0);
 		}
 		if (display.hasFullStacks()) {
-			int u = display.stackUnitCapacity() == 16 ? 16 : 32;
+			int u = display.stackUnitCapacity() == 16
+				? RecipeForestTextures.STACK_16_ICON_U : RecipeForestTextures.STACK_ICON_U;
 			cursor = renderQuantityUnit(context, cursor, y, u, display.fullStacks(),
 				display.stackUnitCapacity());
 		}
 		if (display.hasItems()) {
-			cursor = renderQuantityUnit(context, cursor, y, 48, display.items(), 0);
+			cursor = renderQuantityUnit(context, cursor, y, RecipeForestTextures.ITEM_ICON_U,
+				display.items(), 0);
 		}
 		return cursor;
 	}
 
 	private int renderQuantityUnit(EmiDrawContext context, int x, int y, int u, long count, long capacity) {
-		context.drawTexture(RECIPE_FOREST_WIDGETS, x, y, 0, u, 0, 16, 16, 64, 32);
+		context.drawTexture(RecipeForestTextures.WIDGETS, x, y, u,
+			RecipeForestTextures.QUANTITY_ICON_V, RecipeForestTextures.ICON_SIZE,
+			RecipeForestTextures.ICON_SIZE);
 		String countText = Long.toString(count);
 		context.drawTextWithShadow(EmiPort.literal(countText), x + 16, y + 7, 0xFFFFFFFF);
 		int cursor = x + 16 + font.width(countText);

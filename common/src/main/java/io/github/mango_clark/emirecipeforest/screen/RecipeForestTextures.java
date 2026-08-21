@@ -15,6 +15,12 @@ public final class RecipeForestTextures {
     public static final int DETAILS_ICON_U = 16;
     public static final int DETAILS_ICON_V = 16;
 
+    public static final int QUANTITY_ICON_V = 0;
+    public static final int BOX_ICON_U = 0;
+    public static final int STACK_16_ICON_U = 16;
+    public static final int STACK_ICON_U = 32;
+    public static final int ITEM_ICON_U = 48;
+
     private RecipeForestTextures() {
     }
 }
