@@ -94,7 +94,7 @@
   "tooltip.emi_recipeforest.batch.shift": "Hold §6[shift]§r to adjust by 16",
   "tooltip.emi_recipeforest.batch.control": "Hold §6[ctrl]§r to double or halve",
   "tooltip.emi_recipeforest.batch.alt": "Hold §6[alt]§r to update every root",
-  "tooltip.emi_recipeforest.batch.help": "\n§bRecipe Forest§r\nHold §6[alt]§r while minimizing leftovers to update every root",
+  "tooltip.emi_recipeforest.batch.help": "\n§bRecipe Forest§r\nHold §6[alt]§r to adjust for every root",
 
   "tooltip.emi_recipeforest.help.pointer": "\n§bRecipe Forest§r\nHover the §b[RF]§r icon in the upper-left for root-panel controls",
   "tooltip.emi_recipeforest.help.list": "§bRecipe Forest — List Layout§r\n§6[Left Click]§r Select a root\n§6[Right Click]§r Set batches for minimal leftovers\n§6[Scroll / + / −]§r Adjust batches\n§6[alt]§r Apply batch changes to every root\n\n§6[↑ / ↓]§r Reorder the selected root\n§6[×]§r Remove the selected root\nUse the scrollbar to reach additional roots",
