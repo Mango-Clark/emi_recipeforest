@@ -32,10 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forest shortcuts now support up to four key, scan-code, or mouse bindings stored only in RecipeForest's versioned settings. Existing single-key settings migrate automatically, conflicts show an RF override indicator without changing EMI's config, and the original EMI shortcut still runs when no recipe can be added.
 - Alt quantity columns expand only while Alt is held; quantity and Recipe Forest icons share a unified atlas, and grid batches use compact, cell-fitting digits.
 - EMI compatibility is limited to versions 1.1.13 through 1.1.24 for Minecraft 1.20.1 and validated before mixins apply.
+- English and Korean descriptions now use structured, color-highlighted tooltips, with Korean terminology aligned to EMI's official localization.
 
 ### Fixed
 
-- Fabric and NeoForge clients now pass EMI 1.1.24 startup compatibility checks.
+- Fabric and Forge clients now pass EMI 1.1.24 startup compatibility checks.
 - RecipeForest settings now participate in EMI's native Revert changes action and refresh with restored values.
 - Hovering EMI Help in the Forest screen no longer crashes when RecipeForest appends its guidance.
 - List Length now limits only the visible LIST viewport instead of blocking additional roots in either LIST or GRID.

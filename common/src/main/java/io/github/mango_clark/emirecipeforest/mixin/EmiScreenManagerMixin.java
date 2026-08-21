@@ -233,7 +233,9 @@ public abstract class EmiScreenManagerMixin {
     private static final class RecipeForestTreeButton extends SizedButtonWidget {
         private RecipeForestTreeButton(int x, int y, net.minecraft.client.gui.components.Button.OnPress action) {
             super(x, y, 20, 20, 184, 0, () -> true, action,
-                    List.of(Component.translatable("tooltip.emi_recipeforest.recipe_tree")));
+                    List.of(
+                            Component.translatable("tooltip.emi_recipeforest.recipe_tree"),
+                            Component.translatable("tooltip.emi_recipeforest.recipe_tree.description")));
             texture = RECIPE_FOREST$BUTTONS;
         }
     }
