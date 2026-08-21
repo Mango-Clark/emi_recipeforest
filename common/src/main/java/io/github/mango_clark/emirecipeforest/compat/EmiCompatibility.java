@@ -18,6 +18,7 @@ import io.github.mango_clark.emirecipeforest.platform.Services;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -112,9 +113,9 @@ public final class EmiCompatibility {
             case "dev.emi.emi.widget.RecipeButtonWidget" -> {
                 requireProtectedField(targetClass, "recipe", "Ldev/emi/emi/api/recipe/EmiRecipe;", false, missing);
                 requireMethod(targetClass, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V", false, missing);
-                requireMethodInvocations(targetClass, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
-                        Opcodes.INVOKEVIRTUAL, "dev/emi/emi/runtime/EmiDrawContext", "drawTexture",
-                        "(Lnet/minecraft/resources/ResourceLocation;IIIIIIIIII)V", 1, missing);
+                requireFieldAccesses(targetClass, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
+                        Opcodes.GETSTATIC, "dev/emi/emi/EmiRenderHelper", "BUTTONS",
+                        "Lnet/minecraft/resources/ResourceLocation;", 1, missing);
             }
             case "dev.emi.emi.runtime.EmiReloadManager" -> {
                 requireMethod(targetClass, "clear", "()V", true, missing);
@@ -370,6 +371,36 @@ public final class EmiCompatibility {
                 + " invocations");
     }
 
+    private static void requireFieldAccesses(ClassNode owner, String methodName, String methodDescriptor,
+            int opcode, String targetOwner, String targetName, String targetDescriptor, int expectedCount,
+            List<String> missing) {
+        if (owner != null) {
+            for (MethodNode method : owner.methods) {
+                if (!method.name.equals(methodName) || !method.desc.equals(methodDescriptor)) {
+                    continue;
+                }
+                int count = 0;
+                for (var instruction : method.instructions) {
+                    if (instruction.getOpcode() == opcode && instruction instanceof FieldInsnNode access
+                            && access.owner.equals(targetOwner) && access.name.equals(targetName)
+                            && access.desc.equals(targetDescriptor)) {
+                        count++;
+                    }
+                }
+                if (count == expectedCount) {
+                    return;
+                }
+                missing.add(owner.name + '.' + methodName + methodDescriptor + " exactly " + expectedCount + ' '
+                        + targetOwner + '.' + targetName + ':' + targetDescriptor + " field accesses (found "
+                        + count + ')');
+                return;
+            }
+        }
+        missing.add((owner == null ? "<missing-class>" : owner.name) + '.' + methodName + methodDescriptor
+                + " exactly " + expectedCount + ' ' + targetOwner + '.' + targetName + ':' + targetDescriptor
+                + " field accesses");
+    }
+
     private static void requireField(ClassNode owner, String name, String descriptor, boolean requireStatic,
             List<String> missing) {
         if (hasPublicField(owner, name, descriptor, requireStatic)) {
@@ -527,9 +558,9 @@ public final class EmiCompatibility {
                     missing);
             requireProtectedField(recipeButton, "recipe", "Ldev/emi/emi/api/recipe/EmiRecipe;", false, missing);
             requireMethod(recipeButton, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V", false, missing);
-            requireMethodInvocations(recipeButton, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
-                    Opcodes.INVOKEVIRTUAL, "dev/emi/emi/runtime/EmiDrawContext", "drawTexture",
-                    "(Lnet/minecraft/resources/ResourceLocation;IIIIIIIIII)V", 1, missing);
+            requireFieldAccesses(recipeButton, "render", "(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
+                    Opcodes.GETSTATIC, "dev/emi/emi/EmiRenderHelper", "BUTTONS",
+                    "Lnet/minecraft/resources/ResourceLocation;", 1, missing);
             requireMethod(materialTree, "<init>", "(Ldev/emi/emi/api/recipe/EmiRecipe;)V", false, missing);
             requireField(materialTree, "goal", "Ldev/emi/emi/bom/MaterialNode;", false, missing);
             requireField(materialTree, "resolutions", "Ljava/util/Map;", false, missing);

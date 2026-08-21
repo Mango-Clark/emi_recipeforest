@@ -8,7 +8,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
+
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 
 /** Keeps EMI's native recipe-button renderer while selecting RecipeForest's tree-button texture. */
 @Mixin(value = RecipeButtonWidget.class, remap = false)
@@ -17,9 +18,8 @@ public abstract class RecipeButtonWidgetMixin {
     private static final ResourceLocation RECIPE_FOREST$BUTTONS = EmiPort.id("emi_recipeforest",
             "textures/gui/buttons.png");
 
-    @ModifyArg(method = "render", at = @At(value = "INVOKE",
-            target = "Ldev/emi/emi/runtime/EmiDrawContext;drawTexture("
-                    + "Lnet/minecraft/resources/ResourceLocation;IIIIIIIIII)V"), index = 0)
+    @ModifyExpressionValue(method = "render", at = @At(value = "FIELD",
+            target = "Ldev/emi/emi/EmiRenderHelper;BUTTONS:Lnet/minecraft/resources/ResourceLocation;"))
     private ResourceLocation recipeForest$treeButtonTexture(ResourceLocation nativeTexture) {
         return (Object) this instanceof RecipeTreeButtonWidget && !EmiInput.isShiftDown()
                 ? RECIPE_FOREST$BUTTONS
