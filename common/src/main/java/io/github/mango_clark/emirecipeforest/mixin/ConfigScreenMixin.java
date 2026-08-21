@@ -76,7 +76,7 @@ public abstract class ConfigScreenMixin extends Screen {
                 recipeForest$groupCollapsed);
     }
 
-    @ModifyVariable(method = "updateChanges", at = @At("LOAD"), ordinal = 0, require = 2)
+    @ModifyVariable(method = "updateChanges", at = @At("STORE"), ordinal = 0, require = 1)
     private int recipeForest$includeConfigChanges(int emiChanges) {
         return emiChanges + recipeForest$originalConfig.countChanges(ForestBookmarks.captureConfigState());
     }

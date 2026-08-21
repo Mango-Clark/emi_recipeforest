@@ -32,7 +32,7 @@
 - Forest Screen RF and Alt quantity icons now sample the unified 256x256 atlas with the correct sprite coordinates.
 - EMI Config now opens and rebuilds without loading RecipeForest widgets from the reserved Mixin package.
 - Fabric and NeoForge clients now pass EMI 1.1.24 startup compatibility checks.
-- RecipeForest settings now participate in EMI's native Revert changes action and refresh with restored values.
+- RecipeForest settings now participate in EMI's native Revert changes action, count once, and refresh with restored values.
 - Hovering EMI Help in the Forest screen no longer crashes when RecipeForest appends its guidance.
 - List Length now limits only the visible LIST viewport instead of blocking additional roots in either LIST or GRID.
 - EMI's View Tree shortcut now redirects from its actual generic-input call site, preventing inventory-open Mixin crashes on Fabric and NeoForge.
