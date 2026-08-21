@@ -448,12 +448,12 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                         + recipeButtonBytecode.toString('UTF-8'))
             }
             def recipeButtonLines = recipeButtonBytecode.toString('UTF-8').readLines()
-            def drawTextureCount = recipeButtonLines.count {
-                it.contains('invokevirtual') && it.contains('// Method dev/emi/emi/runtime/EmiDrawContext.drawTexture:')
+            def buttonTextureCount = recipeButtonLines.count {
+                it.contains('getstatic') && it.contains('// Field dev/emi/emi/EmiRenderHelper.BUTTONS:')
             }
-            if (drawTextureCount != 1) {
+            if (buttonTextureCount != 1) {
                 throw new GradleException("EMI ${version}: RecipeButtonWidget expected exactly one native "
-                        + "EmiDrawContext.drawTexture call, found ${drawTextureCount}")
+                        + "EmiRenderHelper.BUTTONS read, found ${buttonTextureCount}")
             }
             logger.lifecycle("Verified EMI ${version}")
         }
