@@ -94,7 +94,7 @@
   "tooltip.emi_recipeforest.batch.shift": "§6[shift]§r를 누르면 16씩 조절",
   "tooltip.emi_recipeforest.batch.control": "§6[ctrl]§r을 누르면 두 배 또는 절반으로 조절",
   "tooltip.emi_recipeforest.batch.alt": "§6[alt]§r를 누르면 모든 루트에 적용",
-  "tooltip.emi_recipeforest.batch.help": "\n§b제작법 포레스트§r\n남는 재료를 최소화할 때 §6[alt]§r를 누르면 모든 루트에 적용합니다",
+  "tooltip.emi_recipeforest.batch.help": "\n§b제작법 포레스트§r\n§6[alt]§r를 누르면서 조절하면 모든 루트에 적용",
 
   "tooltip.emi_recipeforest.help.pointer": "\n§b제작법 포레스트§r\n왼쪽 위의 §b[RF]§r 아이콘에 마우스를 올리면 루트 패널 조작법을 표시합니다",
   "tooltip.emi_recipeforest.help.list": "§b제작법 포레스트 — 목록 배치§r\n§6[좌클릭]§r 루트 선택\n§6[우클릭]§r 남는 재료가 최소가 되도록 배치 수 설정\n§6[스크롤 / + / −]§r 배치 수 조절\n§6[alt]§r 배치 변경을 모든 루트에 적용\n\n§6[↑ / ↓]§r 선택한 루트의 순서 변경\n§6[×]§r 선택한 루트 삭제\n스크롤바로 나머지 루트를 확인할 수 있습니다",
