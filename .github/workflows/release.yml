@@ -1,0 +1,299 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without the v prefix
+        required: true
+        default: 0.1.0
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve release commits
+    runs-on: ubuntu-latest
+    outputs:
+      primary_sha: ${{ steps.refs.outputs.primary_sha }}
+      legacy_sha: ${{ steps.refs.outputs.legacy_sha }}
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Resolve immutable branch refs
+        id: refs
+        shell: bash
+        env:
+          DISPATCH_REF: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$DISPATCH_REF" != "1.21" ]]; then
+            echo "Run releases from the 1.21 branch, not $DISPATCH_REF" >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a stable semantic version, got: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+          legacy_sha="$(git ls-remote origin refs/heads/1.20 | cut -f1)"
+          if [[ -z "$legacy_sha" ]]; then
+            echo "Could not resolve the 1.20 branch" >&2
+            exit 1
+          fi
+          echo "primary_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "legacy_sha=$legacy_sha" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Minecraft ${{ matrix.minecraft }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: "1.21"
+            ref: ${{ needs.prepare.outputs.primary_sha }}
+            minecraft: "1.21.1"
+            java: "21"
+            loaders: "fabric neoforge"
+          - branch: "1.20"
+            ref: ${{ needs.prepare.outputs.legacy_sha }}
+            minecraft: "1.20.1"
+            java: "17"
+            loaders: "fabric forge"
+
+    steps:
+      - name: Check out ${{ matrix.branch }}
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ matrix.ref }}
+
+      - name: Set up Java ${{ matrix.java }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: gradle
+
+      - name: Validate project version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          project_version="$(sed -n 's/^version=//p' gradle.properties)"
+          if [[ "$project_version" != "$RELEASE_VERSION" ]]; then
+            echo "${{ matrix.branch }} has version $project_version, expected $RELEASE_VERSION" >&2
+            exit 1
+          fi
+          heading_prefix="## [$RELEASE_VERSION] - "
+          release_heading="$(awk -v prefix="$heading_prefix" 'index($0, prefix) == 1 { print }' CHANGELOG.md)"
+          release_date="${release_heading#"$heading_prefix"}"
+          if [[ -z "$release_heading" || ! "$release_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "${{ matrix.branch }} has no dated $RELEASE_VERSION changelog section" >&2
+            exit 1
+          fi
+
+      - name: Build all loaders
+        run: bash ./gradlew build --no-daemon
+
+      - name: Stage release jars
+        shell: bash
+        env:
+          LOADERS: ${{ matrix.loaders }}
+          MINECRAFT_VERSION: ${{ matrix.minecraft }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for loader in $LOADERS; do
+            mapfile -t jars < <(
+              find "$loader/build/libs" -maxdepth 1 -type f -name '*.jar' \
+                ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print
+            )
+            if [[ "${#jars[@]}" -ne 1 ]]; then
+              echo "Expected one distributable $loader jar, found ${#jars[@]}" >&2
+              printf '%s\n' "${jars[@]}" >&2
+              exit 1
+            fi
+            target="dist/emi_recipeforest-${RELEASE_VERSION}+${MINECRAFT_VERSION}+${loader}.jar"
+            cp "${jars[0]}" "$target"
+          done
+
+      - name: Upload Minecraft ${{ matrix.minecraft }} jars
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-${{ matrix.minecraft }}
+          path: dist/*.jar
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Create tag and GitHub Release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PRIMARY_SHA: ${{ needs.prepare.outputs.primary_sha }}
+      LEGACY_SHA: ${{ needs.prepare.outputs.legacy_sha }}
+      RELEASE_VERSION: ${{ inputs.version }}
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.primary_sha }}
+          fetch-depth: 0
+
+      - name: Validate release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_version="$(sed -n 's/^version=//p' gradle.properties)"
+          if [[ "$project_version" != "$RELEASE_VERSION" ]]; then
+            echo "Release commit has version $project_version, expected $RELEASE_VERSION" >&2
+            exit 1
+          fi
+          if ! grep -Fq "## [$RELEASE_VERSION] - " CHANGELOG.md; then
+            echo "CHANGELOG.md has no $RELEASE_VERSION release section" >&2
+            exit 1
+          fi
+
+      - name: Download release jars
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Validate release jars
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=(
+            "emi_recipeforest-${RELEASE_VERSION}+1.21.1+fabric.jar"
+            "emi_recipeforest-${RELEASE_VERSION}+1.21.1+neoforge.jar"
+            "emi_recipeforest-${RELEASE_VERSION}+1.20.1+fabric.jar"
+            "emi_recipeforest-${RELEASE_VERSION}+1.20.1+forge.jar"
+          )
+          for jar in "${expected[@]}"; do
+            if [[ ! -f "dist/$jar" ]]; then
+              echo "Missing release asset: $jar" >&2
+              exit 1
+            fi
+          done
+          jar_count="$(find dist -maxdepth 1 -type f -name '*.jar' | wc -l)"
+          if [[ "$jar_count" -ne "${#expected[@]}" ]]; then
+            echo "Expected ${#expected[@]} release jars, found $jar_count" >&2
+            find dist -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "Minecraft 1.21.1: Fabric and NeoForge"
+            echo "Minecraft 1.20.1: Fabric and Forge"
+            echo "1.21 source: $PRIMARY_SHA"
+            echo "1.20 source: $LEGACY_SHA"
+            echo
+            awk -v heading="## [$RELEASE_VERSION] - " '
+              index($0, heading) == 1 { capture = 1; next }
+              capture && /^## \[/ { exit }
+              capture { print }
+              END { if (!capture) exit 1 }
+            ' CHANGELOG.md
+          } > release-notes.md
+          test -s release-notes.md
+
+      - name: Check GitHub CLI
+        run: gh --version
+
+      - name: Create tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            git fetch origin "refs/tags/$tag:refs/tags/$tag"
+            tag_commit="$(git rev-list -n 1 "$tag")"
+            if [[ "$tag_commit" != "$PRIMARY_SHA" ]]; then
+              echo "$tag already points to $tag_commit, expected $PRIMARY_SHA" >&2
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "$tag" "$PRIMARY_SHA"
+            git push origin "$tag"
+          fi
+
+      - name: Create GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+
+          verify_release_assets() {
+            local release_id local_manifest remote_manifest file name size digest
+            release_id="$(gh release view "$tag" --json databaseId --jq .databaseId)"
+            local_manifest="$(mktemp)"
+            remote_manifest="$(mktemp)"
+
+            for file in dist/*.jar; do
+              name="$(basename "$file")"
+              size="$(stat -c %s "$file")"
+              digest="sha256:$(sha256sum "$file" | cut -d' ' -f1)"
+              printf '%s\t%s\t%s\n' "$name" "$size" "$digest"
+            done | sort > "$local_manifest"
+
+            gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              --jq '.assets[] | [.name, (.size | tostring), .digest] | @tsv' \
+              | sort > "$remote_manifest"
+
+            if ! cmp -s "$local_manifest" "$remote_manifest"; then
+              echo "GitHub Release $tag assets do not match the build output" >&2
+              diff -u "$local_manifest" "$remote_manifest" >&2 || true
+              return 1
+            fi
+          }
+
+          if gh release view "$tag" --json isDraft >/dev/null 2>&1; then
+            is_draft="$(gh release view "$tag" --json isDraft --jq .isDraft)"
+            if [[ "$is_draft" != "true" ]]; then
+              if verify_release_assets; then
+                echo "GitHub Release $tag is already complete"
+                exit 0
+              fi
+              echo "Published GitHub Release $tag cannot be changed safely" >&2
+              exit 1
+            fi
+          else
+            gh release create "$tag" \
+              --draft \
+              --verify-tag \
+              --title "$tag" \
+              --notes-file release-notes.md
+          fi
+
+          gh release upload "$tag" dist/*.jar --clobber
+          verify_release_assets
+          gh release edit "$tag" \
+            --draft=false \
+            --title "$tag" \
+            --notes-file release-notes.md
