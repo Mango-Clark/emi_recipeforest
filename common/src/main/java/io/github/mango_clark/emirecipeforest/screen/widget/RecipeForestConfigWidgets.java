@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.function.Supplier;
 
 import dev.emi.emi.config.IntGroup;
+import dev.emi.emi.config.EmiConfig.ConfigGroup;
 import dev.emi.emi.runtime.EmiDrawContext;
 import dev.emi.emi.screen.ConfigEnumScreen;
 import dev.emi.emi.screen.ConfigScreen;
@@ -41,6 +42,9 @@ public final class RecipeForestConfigWidgets {
 
     private static final int CONTROL_WIDTH = 150;
     private static final int BUTTON_HEIGHT = 20;
+    @ConfigGroup("recipeforest.details")
+    private static final boolean DETAIL_GROUP_MARKER = false;
+    private static final ConfigGroup DETAIL_GROUP = resolveDetailGroup();
 
     private RecipeForestConfigWidgets() {
     }
@@ -152,6 +156,9 @@ public final class RecipeForestConfigWidgets {
                         ForestBookmarks.setListLength(rows);
                     }
                 });
+        ((ConfigEntryWidget) gridSize).group = DETAIL_GROUP;
+        ((ConfigEntryWidget) listLength).group = DETAIL_GROUP;
+        listLength.endGroup = true;
         settings.add(new ValueEntry(
                 Component.translatable("screen.emi_recipeforest.settings.title"), currentSearch,
                 tooltip("screen.emi_recipeforest.settings.reset.tooltip"),
@@ -355,6 +362,15 @@ public final class RecipeForestConfigWidgets {
             button.setX(x + width - button.getWidth());
             button.setY(y);
             button.setMessage(value.get());
+        }
+    }
+
+    private static ConfigGroup resolveDetailGroup() {
+        try {
+            return RecipeForestConfigWidgets.class.getDeclaredField("DETAIL_GROUP_MARKER")
+                    .getAnnotation(ConfigGroup.class);
+        } catch (NoSuchFieldException exception) {
+            throw new ExceptionInInitializerError(exception);
         }
     }
 }

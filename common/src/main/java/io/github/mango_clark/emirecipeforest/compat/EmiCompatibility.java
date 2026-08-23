@@ -129,8 +129,12 @@ public final class EmiCompatibility {
                     "(Ldev/emi/emi/config/SidebarType;)Ljava/util/List;", true, missing);
             case "dev.emi.emi.screen.widget.EmiSearchWidget" ->
                     requireMethod(targetClass, "keyPressed", "(III)Z", false, missing);
-            case "dev.emi.emi.screen.widget.config.ConfigEntryWidget" -> requireMethod(targetClass, "render",
-                    "(Lnet/minecraft/client/gui/GuiGraphics;IIIIIIIZF)V", false, missing);
+            case "dev.emi.emi.screen.widget.config.ConfigEntryWidget" -> {
+                requireField(targetClass, "group", "Ldev/emi/emi/config/EmiConfig$ConfigGroup;", false, missing);
+                requireField(targetClass, "endGroup", "Z", false, missing);
+                requireMethod(targetClass, "render",
+                        "(Lnet/minecraft/client/gui/GuiGraphics;IIIIIIIZF)V", false, missing);
+            }
             case "dev.emi.emi.screen.widget.config.EmiBindWidget" -> requirePrivateField(targetClass, "bind",
                     "Ldev/emi/emi/input/EmiBind;", false, missing);
             case "dev.emi.emi.screen.ConfigScreen" -> {
@@ -657,6 +661,8 @@ public final class EmiCompatibility {
             requireMethod(configEntry, "render",
                     "(Lnet/minecraft/client/gui/GuiGraphics;IIIIIIIZF)V", false, missing);
             requireMethod(configEntry, "getTooltip", "(II)Ljava/util/List;", false, missing);
+            requireField(configEntry, "group", "Ldev/emi/emi/config/EmiConfig$ConfigGroup;", false, missing);
+            requireField(configEntry, "endGroup", "Z", false, missing);
             requireField(configEntry, "parentGroups", "Ljava/util/List;", false, missing);
             requireMethod(configSearch, "getSearch", "()Ljava/lang/String;", false, missing);
             requireSuperclass(configJumpButton, "dev/emi/emi/screen/widget/SizedButtonWidget", missing);
