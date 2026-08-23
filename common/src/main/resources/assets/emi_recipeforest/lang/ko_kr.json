@@ -33,7 +33,7 @@
   "key.emi_recipeforest.add_to_forest": "제작법을 포레스트에 추가",
   "key.emi.view_stack_tree": "아이템 제작법을 포레스트에 추가",
   "key.emi.view_tree": "제작법 포레스트 보기",
-  "config.emi.tooltip.binds.view_stack_tree": "가리킨 아이템 항목의 기본 제작법을 제작법 포레스트에 추가합니다.\n다른 화면은 열지 않습니다.",
+  "config.emi.tooltip.binds.view_stack_tree": "가리킨 아이템 항목의 기본 제작법을 제작법 포레스트에 추가합니다.\n추가 후 제작법 포레스트를 엽니다.",
   "config.emi.tooltip.binds.view_tree": "현재 제작법 포레스트를 엽니다.\nEMI의 단일 제작법 트리 동작을 대체합니다.",
 
   "screen.emi_recipeforest.settings.forest_key": "포레스트 추가 키",

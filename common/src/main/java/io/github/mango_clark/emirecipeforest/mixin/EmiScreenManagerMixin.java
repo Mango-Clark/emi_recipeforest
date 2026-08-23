@@ -111,6 +111,7 @@ public abstract class EmiScreenManagerMixin {
         EmiRecipe recipe = recipeForest$resolveRecipe(hovered);
         if (recipe != null && recipe.supportsRecipeTree()) {
             ForestManager.add(recipe);
+            ForestScreen.open();
             cir.setReturnValue(true);
         }
     }
@@ -142,8 +143,8 @@ public abstract class EmiScreenManagerMixin {
 
     @Redirect(method = "stackInteraction", at = @At(value = "INVOKE",
             target = "Ldev/emi/emi/api/EmiApi;viewRecipeTree()V"))
-    private static void recipeForest$suppressViewStackTreeScreen() {
-        // View Stack Tree adds to the Forest silently; View Tree opens the current Forest.
+    private static void recipeForest$openViewStackTreeForest() {
+        ForestScreen.open();
     }
 
     @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)
