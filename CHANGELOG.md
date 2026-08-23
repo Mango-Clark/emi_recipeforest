@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-23
+
 ### Added
 
 - Initial Minecraft 1.20.1 development template for Fabric and Forge.
@@ -52,3 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forest trees now use EMI's handled Recipe Tree screen, preventing Shift-hover crashes outside container screens.
 - Shift-click resolution now applies a preferred tree-capable recipe when possible and opens the recipe picker otherwise; the configurable Forest shortcut no longer conflicts with R and resolves hovered outputs reliably.
 - Active Forest roots, batches, selection, crafting mode, resolutions, and fold states are restored after EMI recipe reloads when their recipes remain available.
+
+[Unreleased]: https://github.com/Mango-Clark/emi_recipeforest/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Mango-Clark/emi_recipeforest/releases/tag/v0.1.0
