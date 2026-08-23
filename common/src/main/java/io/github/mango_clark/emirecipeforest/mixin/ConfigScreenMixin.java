@@ -40,6 +40,7 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -178,8 +179,8 @@ public abstract class ConfigScreenMixin extends Screen {
 
                     @Override
                     protected void setValue(IntGroup value) {
-                        int columns = Math.clamp(value.values.getInt(0), 1, 16);
-                        int rows = Math.clamp(value.values.getInt(1), 1, 8);
+                        int columns = Mth.clamp(value.values.getInt(0), 1, 16);
+                        int rows = Mth.clamp(value.values.getInt(1), 1, 8);
                         value.values.set(0, columns);
                         value.values.set(1, rows);
                         ForestBookmarks.setRootGridSize(columns, rows);
