@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- RecipeForest-overridden EMI bindings now display the RF marker in EMI Config.
 - Forest Screen RF and Alt quantity icons now sample the unified 256x256 atlas with the correct sprite coordinates.
 - EMI Config now opens and rebuilds without loading RecipeForest widgets from the reserved Mixin package.
 - Fabric and Forge clients now pass EMI 1.1.24 startup compatibility checks.
