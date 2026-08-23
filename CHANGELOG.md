@@ -29,6 +29,7 @@
 
 ### Fixed
 
+- RecipeForest-overridden EMI bindings now display the RF marker in EMI Config.
 - Forest Screen RF and Alt quantity icons now sample the unified 256x256 atlas with the correct sprite coordinates.
 - EMI Config now opens and rebuilds without loading RecipeForest widgets from the reserved Mixin package.
 - Fabric and NeoForge clients now pass EMI 1.1.24 startup compatibility checks.
