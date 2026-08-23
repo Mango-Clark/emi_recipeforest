@@ -7,7 +7,7 @@
 | Minecraft | EMI             | [Fabric](https://fabricmc.net/) | [Forge](https://files.minecraftforge.net/net/minecraftforge/forge/) | [NeoForge](https://neoforged.net/) |
 |-----------|-----------------|---------------------------------|---------------------------------------------------------------------|------------------------------------|
 | 1.21.2 +  | No              | 🔵                              | 🔴                                                                  | 🔵                                 |
-| 1.21.1    | 1.1.13 - 1.1.24 | 🟢                              | 🔴                                                                  | 🟡                                 |
+| 1.21.1    | 1.1.13 - 1.1.24 | 🟢                              | 🔴                                                                  | 🟢                                 |
 | 1.20.1    | 1.1.13 - 1.1.24 | 🟢                              | 🟢                                                                  | 🔴                                 |
 | Others    | -               | 🔴                              | 🔴                                                                  | 🔴                                 |
 
@@ -19,10 +19,10 @@
 
 ### Current Version and Compatibility
 
-| EMI RecipeForest         | EMI                 | Mod loader        |
-|--------------------------|---------------------|-------------------|
-| 0.1.0-SNAPSHOT (Fabric)  | 1.1.13 - 1.1.24     | Fabric [0.14.21,) |
-| 0.1.0-SNAPSHOT (Forge)   | 1.1.13 - 1.1.24     | Forge [47,)       |
+| EMI RecipeForest | EMI             | Mod loader        |
+|------------------|-----------------|-------------------|
+| 0.1.0 (Fabric)   | 1.1.13 - 1.1.24 | Fabric [0.14.21,) |
+| 0.1.0 (Forge)    | 1.1.13 - 1.1.24 | Forge [47,)       |
 
 
 ## Note
