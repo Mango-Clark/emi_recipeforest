@@ -21,7 +21,7 @@
 - Recipe Forest settings now use EMI's native config index, row tooltips, numeric and binding controls, and reset confirmation between Cheats and Developer; resolution scope opens EMI's separate option picker.
 - Root layout and quantity display now use EMI-style option pickers, box grouping uses the native boolean control, and detailed settings provide paired grid dimensions and a persistent maximum list viewport length.
 - Recipe Screen controls show a green add-to-Forest icon when the recipe already exists in the active Forest, and Alt expands LIST root quantities into box, stack, and item units.
-- EMI's View Tree shortcut opens the current Forest, while View Stack Tree and the Forest shortcut add recipes silently.
+- EMI's View Tree shortcut opens the current Forest, View Stack Tree adds the hovered recipe and opens the updated Forest, and the Forest shortcut adds recipes silently.
 - Forest shortcuts now support up to four key, scan-code, or mouse bindings stored only in RecipeForest's versioned settings. Existing single-key settings migrate automatically, conflicts show an RF override indicator without changing EMI's config, and the original EMI shortcut still runs when no recipe can be added.
 - Alt quantity columns expand only while Alt is held; quantity and Recipe Forest icons share a unified atlas, and grid batches use compact, cell-fitting digits.
 - EMI compatibility is limited to versions 1.1.13 through 1.1.24 for Minecraft 1.21.1 and validated before mixins apply.

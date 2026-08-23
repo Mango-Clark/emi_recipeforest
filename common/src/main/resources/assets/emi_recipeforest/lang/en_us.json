@@ -33,7 +33,7 @@
   "key.emi_recipeforest.add_to_forest": "Add Recipe to Forest",
   "key.emi.view_stack_tree": "Add Stack Recipe to Forest",
   "key.emi.view_tree": "View Recipe Forest",
-  "config.emi.tooltip.binds.view_stack_tree": "Adds the hovered stack's preferred recipe to the Recipe Forest.\nDoes not open another screen.",
+  "config.emi.tooltip.binds.view_stack_tree": "Adds the hovered stack's preferred recipe to the Recipe Forest.\nOpens the updated Recipe Forest.",
   "config.emi.tooltip.binds.view_tree": "Opens the current Recipe Forest.\nReplaces EMI's single Recipe Tree action.",
 
   "screen.emi_recipeforest.settings.forest_key": "Add to Forest binding",
