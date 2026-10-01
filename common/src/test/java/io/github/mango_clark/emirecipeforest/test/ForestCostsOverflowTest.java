@@ -149,6 +149,36 @@ class ForestCostsOverflowTest {
     }
 
     @Test
+    void equalOutputAndInputChancesCancelBeforePartialConsumption() throws Exception {
+        Class<?> flat = runtime.type("dev.emi.emi.bom.FlatMaterialCost");
+        for (float probability : new float[]{0.1F, 0.2F}) {
+            Object tree = treeWithOutput("cancel-progress", chanceStack("cancel-output", 1, probability),
+                    chanceStack("cancel-input", 1, probability));
+            set(tree, "batches", 5L);
+            Object costs = calculate(List.of(tree), inventory(runtime.stack("cancel-input", 1)));
+            Object total = first(result(costs, "getTotal"), "chanceCosts");
+            Object remaining = first(result(costs, "getProgress"), "chanceCosts");
+            assertEquals(5L, effective(total), "total at " + probability);
+            assertEquals(4L, effective(remaining), "remaining at " + probability);
+            assertEquals(1L, call(costsType, null, "completedAmount", new Class<?>[]{flat, flat}, total, remaining),
+                    "completed at " + probability);
+        }
+    }
+
+    @Test
+    void equalOutputAndInputChancesAcceptMaximumBatchCount() throws Exception {
+        for (float probability : new float[]{0.1F, 0.2F}) {
+            Object tree = treeWithOutput("cancel-maximum", chanceStack("cancel-output", 1, probability),
+                    chanceStack("cancel-input", 1, probability));
+            set(tree, "batches", Long.MAX_VALUE);
+            call(costsType, null, "validateAmounts", new Class<?>[]{List.class, Map.class}, List.of(tree), Map.of());
+            Object costs = calculate(List.of(tree), null);
+            assertEquals(Long.MAX_VALUE, effective(first(result(costs, "getTotal"), "chanceCosts")));
+            assertEquals(Long.MAX_VALUE, effective(first(result(costs, "getProgress"), "chanceCosts")));
+        }
+    }
+
+    @Test
     void returnedMaterialProductAndSumRejectOverflow() throws Exception {
         Object product = tree("returned-product", 1, runtime.stack("input", 1));
         remainder(product, "bucket", Long.MAX_VALUE);

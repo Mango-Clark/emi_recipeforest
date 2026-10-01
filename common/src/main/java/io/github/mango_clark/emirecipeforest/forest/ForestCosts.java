@@ -1,7 +1,5 @@
 package io.github.mango_clark.emirecipeforest.forest;
 
-import java.math.BigDecimal;
-import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -20,6 +18,8 @@ import dev.emi.emi.bom.MaterialTree;
 import dev.emi.emi.bom.ProgressState;
 import dev.emi.emi.bom.TreeCost;
 import io.github.mango_clark.emirecipeforest.compat.EmiCompatibility;
+import io.github.mango_clark.emirecipeforest.forest.ForestAmounts.Chance;
+import io.github.mango_clark.emirecipeforest.forest.ForestAmounts.Fraction;
 
 /** Calculates forest-wide costs while carrying inventory and remainders between roots. */
 public final class ForestCosts {
@@ -147,43 +147,42 @@ public final class ForestCosts {
         if (remaining == null) {
             return original.getEffectiveAmount();
         }
-        return expected(original).subtract(expected(remaining)).max(BigDecimal.ZERO)
-                .setScale(0, RoundingMode.CEILING).longValueExact();
+        return expected(original).subtract(expected(remaining)).max(Fraction.ZERO).roundLong(RoundingMode.CEILING);
     }
 
-    private static BigDecimal expected(FlatMaterialCost cost) {
+    private static Fraction expected(FlatMaterialCost cost) {
         if (cost instanceof ExactChanceMaterialCost exact) {
             return exact.expected;
         }
         return cost instanceof ChanceMaterialCost chance
-                ? BigDecimal.valueOf(cost.amount).multiply(ForestAmounts.decimalChance(chance.chance))
-                : BigDecimal.valueOf(cost.amount);
+                ? Fraction.of(cost.amount).multiply(Fraction.ofChance(chance.chance))
+                : Fraction.of(cost.amount);
     }
 
     // EMI owns the cost model. Only the expected quantity needs a wider intermediate;
     // inherited amount/chance remain available to EMI renderers and tooltips.
     private static final class ExactChanceMaterialCost extends ChanceMaterialCost {
-        private BigDecimal expected;
+        private Fraction expected;
 
-        private ExactChanceMaterialCost(EmiIngredient ingredient, long amount, BigDecimal chance) {
+        private ExactChanceMaterialCost(EmiIngredient ingredient, long amount, Fraction chance) {
             super(ingredient, amount, chance.floatValue());
-            expected = ForestAmounts.checkExpected(BigDecimal.valueOf(amount).multiply(chance));
+            expected = ForestAmounts.checkExpected(Fraction.of(amount).multiply(chance));
         }
 
-        private void mergeExact(long amount, BigDecimal chance) {
+        private void mergeExact(long amount, Fraction chance) {
             long sum = Math.addExact(this.amount, amount);
-            BigDecimal next = ForestAmounts.checkExpected(expected.add(BigDecimal.valueOf(amount).multiply(chance)));
+            Fraction next = ForestAmounts.checkExpected(expected.add(Fraction.of(amount).multiply(chance)));
             this.amount = sum;
             expected = next;
-            this.chance = sum == 0 ? 0 : next.divide(BigDecimal.valueOf(sum), PRECISION).floatValue();
+            this.chance = sum == 0 ? 0 : next.divide(Fraction.of(sum)).floatValue();
         }
 
         @Override
         public void merge(long amount, float chance) {
-            mergeExact(amount, ForestAmounts.decimalChance(chance));
+            mergeExact(amount, Fraction.ofChance(chance));
         }
 
-        private void setExpected(BigDecimal value) {
+        private void setExpected(Fraction value) {
             expected = ForestAmounts.checkExpected(value);
             amount = 1;
             chance = value.floatValue();
@@ -194,8 +193,6 @@ public final class ForestCosts {
             return Math.max(minBatch, ForestAmounts.roundExpected(expected));
         }
     }
-
-    private static final MathContext PRECISION = new MathContext(50);
 
     private static final class NodeProgress {
         private ProgressState progress = ProgressState.UNSTARTED;
@@ -258,14 +255,14 @@ public final class ForestCosts {
             }
         }
 
-        private BigDecimal takeChancedRemainder(EmiStack stack, BigDecimal desired,
+        private Fraction takeChancedRemainder(EmiStack stack, Fraction desired,
                 boolean catalyst, Chance chance) {
             ExactChanceMaterialCost chanced = (ExactChanceMaterialCost) result.chanceRemainders.get(stack);
             if (chanced != null) {
-                BigDecimal effective = chanced.expected;
-                BigDecimal given = effective.min(desired);
+                Fraction effective = chanced.expected;
+                Fraction given = effective.min(desired);
                 if (!catalyst) {
-                    BigDecimal leftover = effective.compareTo(desired) >= 0
+                    Fraction leftover = effective.compareTo(desired) >= 0
                             ? effective.subtract(desired)
                             : effective.subtract(given.multiply(chance.value));
                     // EMI's partial-consumption formula can produce a negative
@@ -281,12 +278,12 @@ public final class ForestCosts {
             }
             FlatMaterialCost flat = result.remainders.get(stack);
             if (flat != null) {
-                BigDecimal effective = BigDecimal.valueOf(flat.amount);
-                BigDecimal given = effective.min(desired);
+                Fraction effective = Fraction.of(flat.amount);
+                Fraction given = effective.min(desired);
                 if (!catalyst) {
                     if (effective.compareTo(desired) >= 0) {
                         // Match EMI's integer inventory remainder conversion, without double rounding.
-                        flat.amount = effective.subtract(desired).setScale(0, RoundingMode.DOWN).longValueExact();
+                        flat.amount = effective.subtract(desired).roundLong(RoundingMode.DOWN);
                         if (flat.amount == 0) {
                             result.remainders.remove(stack);
                         }
@@ -296,7 +293,7 @@ public final class ForestCosts {
                 }
                 return given;
             }
-            return BigDecimal.ZERO;
+            return Fraction.ZERO;
         }
 
         private long takeRemainder(EmiStack stack, long desired, boolean catalyst) {
@@ -351,20 +348,18 @@ public final class ForestCosts {
             List<EmiStack> ingredientStacks = node.ingredient.getEmiStacks();
             for (EmiStack stack : ingredientStacks) {
                 if (chance.chanced) {
-                    BigDecimal desired = ForestAmounts.checkExpected(BigDecimal.valueOf(amount).multiply(chance.value));
-                    BigDecimal given = takeChancedRemainder(stack, desired, catalyst, chance);
+                    Fraction desired = ForestAmounts.checkExpected(Fraction.of(amount).multiply(chance.value));
+                    Fraction given = takeChancedRemainder(stack, desired, catalyst, chance);
                     if (given.signum() > 0) {
                         if (given.compareTo(desired) == 0) {
                             amount = 0;
                             continue;
                         }
-                        BigDecimal scaled = given.divide(chance.value, PRECISION);
-                        long consumed = scaled.setScale(0, RoundingMode.DOWN).longValueExact();
+                        long consumed = given.divide(chance.value).roundLong(RoundingMode.DOWN);
                         amount = Math.subtractExact(amount, consumed);
                         if (amount > 0) {
-                            BigDecimal fraction = scaled.subtract(BigDecimal.valueOf(consumed));
-                            chance = new Chance(BigDecimal.valueOf(amount).subtract(fraction).multiply(chance.value)
-                                    .divide(BigDecimal.valueOf(amount), PRECISION), true);
+                            // Keep the unconsumed expectation exact while retaining EMI's integer batch count.
+                            chance = new Chance(desired.subtract(given).divide(Fraction.of(amount)), true);
                         }
                     }
                 } else {
@@ -415,25 +410,6 @@ public final class ForestCosts {
                     addRemainder(child.remainder, remainderAmount, produced.consume(child.consumeChance));
                 }
             }
-        }
-    }
-
-    private record Chance(BigDecimal value, boolean chanced) {
-        private static final Chance DEFAULT = new Chance(BigDecimal.ONE, false);
-
-        private Chance produce(float chance) {
-            if (chance == 1) {
-                return this;
-            }
-            BigDecimal divisor = ForestAmounts.decimalChance(chance);
-            if (divisor.signum() == 0) {
-                throw new ArithmeticException("Invalid zero output chance");
-            }
-            return new Chance(value.divide(divisor, PRECISION), true);
-        }
-
-        private Chance consume(float chance) {
-            return chance == 1 ? this : new Chance(value.multiply(ForestAmounts.decimalChance(chance)), true);
         }
     }
 }
