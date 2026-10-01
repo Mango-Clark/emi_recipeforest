@@ -11,6 +11,7 @@ import com.google.common.collect.Maps;
 import dev.emi.emi.api.recipe.EmiPlayerInventory;
 import dev.emi.emi.api.recipe.EmiRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
+import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.bom.ChanceMaterialCost;
 import dev.emi.emi.bom.FlatMaterialCost;
 import dev.emi.emi.bom.MaterialTree;
@@ -48,6 +49,9 @@ public final class ForestFavorites {
             return;
         }
 
+        // Neither calculation may publish progress if the inventory pass is invalid.
+        ForestCosts.validateAmounts(trees, Map.of(), inventory);
+
         EmiPlayerInventory emptyInventory = new EmiPlayerInventory(List.of());
         emptyInventory.inventory.clear();
         ForestCosts original = ForestCosts.calculateNew(trees, emptyInventory);
@@ -71,7 +75,7 @@ public final class ForestFavorites {
                 continue;
             }
             hasSomething = true;
-            int state = inventory.canCraft(recipe, batch) ? 2 : inventory.canCraft(recipe) ? 1 : 0;
+            int state = canCraftBatches(inventory, recipe, batch) ? 2 : inventory.canCraft(recipe) ? 1 : 0;
             long total = originalAmounts.getOrDefault(recipe, amount);
             nextFavorites.add(RECIPE_SYNTHETIC_FACTORY.create(recipe, batch, amount, total, state));
         }
@@ -108,6 +112,23 @@ public final class ForestFavorites {
         }
         EmiFavorites.syntheticFavorites.clear();
         EmiFavorites.syntheticFavorites.addAll(nextFavorites);
+    }
+
+    private static boolean canCraftBatches(EmiPlayerInventory inventory, EmiRecipe recipe, long batches) {
+        // EMI multiplies stack amounts by the aggregated batch count unchecked.
+        // Individual forest roots can fit while this shared-recipe total cannot.
+        try {
+            for (EmiIngredient ingredient : recipe.getInputs()) {
+                if (!ingredient.isEmpty()) {
+                    for (EmiStack stack : ingredient.getEmiStacks()) {
+                        Math.multiplyExact(stack.getAmount(), batches);
+                    }
+                }
+            }
+        } catch (ArithmeticException exception) {
+            return false;
+        }
+        return inventory.canCraft(recipe, batches);
     }
 
     private static void countRecipes(List<MaterialTree> trees, Object2LongMap<EmiRecipe> batches,

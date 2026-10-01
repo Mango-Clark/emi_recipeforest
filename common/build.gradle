@@ -25,6 +25,8 @@ dependencies {
     annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     testImplementation platform('org.junit:junit-bom:5.10.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    // Match Minecraft 1.21.1's fastutil for the isolated EMI favorite-counter tests.
+    testRuntimeOnly 'it.unimi.dsi:fastutil:8.5.12'
 }
 
 tasks.named('test', Test).configure {

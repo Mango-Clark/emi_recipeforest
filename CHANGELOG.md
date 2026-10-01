@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Forest batch changes and bookmark restoration reject quantities outside the calculation range while preserving the previous forest. Material costs, chance quantities, and recipe rounding retain precision for large counts.
+- Crafting favorites preserve prior progress when inventory-dependent quantities overflow, and reject overflowing aggregate input products when checking bulk crafting availability.
 - Ctrl+R selects a supported recipe in one pass instead of retrying random recipes up to 100,000 times.
 - Forest horizontal panning includes the actual node, material-cost, leftover, and quantity-label extents at the current zoom.
 - Fabric metadata links to RecipeForest's source repository instead of Fabric's example project and homepage.

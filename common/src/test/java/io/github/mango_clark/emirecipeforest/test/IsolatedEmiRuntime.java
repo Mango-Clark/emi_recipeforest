@@ -33,15 +33,18 @@ final class IsolatedEmiRuntime implements AutoCloseable {
             files.add(file);
         }
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        URL fastutil = Class.forName("it.unimi.dsi.fastutil.objects.Object2LongMap")
+                .getProtectionDomain().getCodeSource().getLocation();
         try (StandardJavaFileManager manager = compiler.getStandardFileManager(null, null, null)) {
             var units = manager.getJavaFileObjectsFromPaths(files);
-            boolean success = compiler.getTask(null, manager, null, List.of("-d", classes.toString()), null, units).call();
+            boolean success = compiler.getTask(null, manager, null,
+                    List.of("-d", classes.toString(), "-classpath", Path.of(fastutil.toURI()).toString()), null, units).call();
             if (!success) {
                 throw new IllegalStateException("Could not compile isolated EMI test doubles");
             }
         }
         Path mainClasses = Path.of(System.getProperty("user.dir"), "build", "classes", "java", "main");
-        loader = new URLClassLoader(new URL[]{classes.toUri().toURL(), mainClasses.toUri().toURL()},
+        loader = new URLClassLoader(new URL[]{classes.toUri().toURL(), mainClasses.toUri().toURL(), fastutil},
                 ClassLoader.getPlatformClassLoader());
     }
 
@@ -193,7 +196,69 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 """),
             Map.entry("dev.emi.emi.api.recipe.EmiPlayerInventory", """
                 package dev.emi.emi.api.recipe;
-                public final class EmiPlayerInventory { public java.util.Map<dev.emi.emi.api.stack.EmiStack,dev.emi.emi.api.stack.EmiStack> inventory=new java.util.LinkedHashMap<>(); public EmiPlayerInventory(java.util.List<dev.emi.emi.api.stack.EmiStack> stacks){for(var stack:stacks)inventory.put(stack,stack);} public static EmiPlayerInventory of(net.minecraft.world.entity.player.Player player){return new EmiPlayerInventory(java.util.List.of());} }
+                public final class EmiPlayerInventory {
+                    public java.util.Map<dev.emi.emi.api.stack.EmiStack,dev.emi.emi.api.stack.EmiStack> inventory=new java.util.LinkedHashMap<>();
+                    public EmiPlayerInventory(java.util.List<dev.emi.emi.api.stack.EmiStack> stacks){for(var stack:stacks)inventory.put(stack,stack);}
+                    public static EmiPlayerInventory of(net.minecraft.world.entity.player.Player player){return new EmiPlayerInventory(java.util.List.of());}
+                    public boolean canCraft(EmiRecipe recipe){return canCraft(recipe,1);}
+                    // Deliberately retain EMI's unchecked product so regression tests detect a missing guard.
+                    public boolean canCraft(EmiRecipe recipe,long amount){
+                        java.util.Map<dev.emi.emi.api.stack.EmiStack,Long> used=new java.util.LinkedHashMap<>();
+                        outer:for(var ingredient:recipe.getInputs()){
+                            if(ingredient.isEmpty())continue;
+                            for(var stack:ingredient.getEmiStacks()){
+                                long desired=stack.getAmount()*amount;
+                                if(inventory.containsKey(stack)){
+                                    var identity=inventory.get(stack);
+                                    long alreadyUsed=used.getOrDefault(identity,0L);
+                                    long available=identity.getAmount()-alreadyUsed;
+                                    if(available>=desired){used.put(identity,desired+alreadyUsed);continue outer;}
+                                }
+                            }
+                            return false;
+                        }
+                        return true;
+                    }
+                }
+                """),
+            Map.entry("com.google.common.collect.Maps", """
+                package com.google.common.collect;
+                public final class Maps {
+                    public static <K,V> java.util.HashMap<K,V> newHashMap(java.util.Map<? extends K,? extends V> source){return new java.util.HashMap<>(source);}
+                }
+                """),
+            Map.entry("dev.emi.emi.runtime.EmiFavorite", """
+                package dev.emi.emi.runtime;
+                public class EmiFavorite {
+                    public static final class Synthetic extends EmiFavorite {
+                        public final dev.emi.emi.api.recipe.EmiRecipe recipe;
+                        public final dev.emi.emi.api.stack.EmiIngredient ingredient;
+                        public final long batches,amount,total;
+                        public final int state;
+                        public Synthetic(dev.emi.emi.api.recipe.EmiRecipe recipe,long batches,long amount,long total,int state){this.recipe=recipe;this.ingredient=null;this.batches=batches;this.amount=amount;this.total=total;this.state=state;}
+                        public Synthetic(dev.emi.emi.api.stack.EmiIngredient ingredient,long amount,long total){this.recipe=null;this.ingredient=ingredient;this.batches=0;this.amount=amount;this.total=total;this.state=0;}
+                    }
+                }
+                """),
+            Map.entry("dev.emi.emi.runtime.EmiFavorites", """
+                package dev.emi.emi.runtime;
+                public final class EmiFavorites {
+                    public static java.util.List<EmiFavorite.Synthetic> syntheticFavorites=new java.util.ArrayList<>();
+                    // EMI 1.1.24 countRecipes traversal and accumulation, using the real fastutil maps.
+                    public static void countRecipes(it.unimi.dsi.fastutil.objects.Object2LongMap<dev.emi.emi.api.recipe.EmiRecipe> batches,
+                            it.unimi.dsi.fastutil.objects.Object2LongMap<dev.emi.emi.api.recipe.EmiRecipe> amounts,dev.emi.emi.bom.MaterialNode node){
+                        if(node.recipe instanceof dev.emi.emi.api.recipe.EmiResolutionRecipe){countRecipes(batches,amounts,node.children.get(0));return;}
+                        if(node.recipe!=null){
+                            long amount=node.neededBatches;
+                            if(batches.containsKey(node.recipe)){amount+=batches.getLong(node.recipe);batches.removeLong(node.recipe);}
+                            batches.put(node.recipe,amount);
+                            amount=node.totalNeeded;
+                            if(amounts.containsKey(node.recipe)){amount+=amounts.getLong(node.recipe);amounts.removeLong(node.recipe);}
+                            amounts.put(node.recipe,amount);
+                            for(var child:node.children)countRecipes(batches,amounts,child);
+                        }
+                    }
+                }
                 """),
             Map.entry("dev.emi.emi.bom.ProgressState", """
                 package dev.emi.emi.bom; public enum ProgressState { UNSTARTED, PARTIAL, COMPLETED }

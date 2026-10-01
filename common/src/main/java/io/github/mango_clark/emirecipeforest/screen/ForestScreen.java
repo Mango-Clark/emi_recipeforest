@@ -1037,7 +1037,12 @@ public class ForestScreen extends BoMScreen {
 			ForestManager.toggleCraftingMode();
 			recalculateTree();
 		} else if (batches.contains(mx, my) && ForestManager.getSelectedTree() != null) {
-			if (ForestManager.tryChangeBatches(batchTargets(), tree -> ForestAmounts.idealBatch(tree.goal, tree.cost))) {
+			boolean[] changed = {false};
+			if (ForestManager.tryChangeBatches(batchTargets(), tree -> {
+				long ideal = ForestAmounts.idealBatch(tree.goal, tree.cost);
+				changed[0] |= ideal != tree.batches;
+				return ideal;
+			}) && changed[0]) {
 				Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
 				recalculateTree();
 			}

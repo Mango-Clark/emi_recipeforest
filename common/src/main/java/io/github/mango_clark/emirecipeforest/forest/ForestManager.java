@@ -132,7 +132,7 @@ public final class ForestManager {
             return false;
         }
         if (candidates.entrySet().stream().allMatch(entry -> entry.getKey().batches == entry.getValue())) {
-            return false;
+            return true;
         }
         candidates.forEach((tree, batches) -> tree.batches = batches);
         synchronizeSelectedTree();

@@ -891,6 +891,10 @@ class ForestBehaviorTest {
         assertSame(second, call(manager, "getSelectedTree", types()));
         assertTrue((boolean) call(manager, "isCraftingMode", types()));
         assertTrue((boolean) call(manager, "hasPendingResolution", types()));
+        ToLongFunction<Object> unchanged = tree -> 1;
+        assertTrue((boolean) call(manager, "tryChangeBatches", types(List.class, ToLongFunction.class),
+                List.of(first, second), unchanged));
+        assertSame(second, call(manager, "getSelectedTree", types()));
         ToLongFunction<Object> maximum = tree -> tree == first ? Long.MAX_VALUE - 1 : 1;
         assertTrue((boolean) call(manager, "tryChangeBatches", types(List.class, ToLongFunction.class),
                 List.of(first, second), maximum));
