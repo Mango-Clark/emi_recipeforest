@@ -23,3 +23,6 @@ runs
 
 # VS Code
 .vscode
+
+# tmp Files
+.tmp*
