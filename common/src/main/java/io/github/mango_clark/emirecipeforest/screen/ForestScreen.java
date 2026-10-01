@@ -64,6 +64,7 @@ import io.github.mango_clark.emirecipeforest.compat.EmiCompatibility;
 import io.github.mango_clark.emirecipeforest.forest.ForestCosts;
 import io.github.mango_clark.emirecipeforest.forest.ForestAmounts;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
+import io.github.mango_clark.emirecipeforest.forest.ForestRecipeSelection;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay.DisplayMode;
 import io.github.mango_clark.emirecipeforest.mixin.EmiApiMixin;
@@ -875,16 +876,11 @@ public class ForestScreen extends BoMScreen {
 			BookmarkNameScreen.openForSave(this);
 			return true;
 		} else if (EmiInput.isControlDown() && keyCode == GLFW.GLFW_KEY_R) {
-			List<EmiRecipe> recipes = EmiApi.getRecipeManager().getRecipes();
-			if (recipes.size() > 0) {
-				for (int i = 0; i < 100_000; i++) {
-					EmiRecipe recipe = recipes.get(EmiUtil.RANDOM.nextInt(recipes.size()));
-					if (recipe.supportsRecipeTree()) {
-						ForestManager.replaceSolo(recipe);
-						init();
-						return true;
-					}
-				}
+			EmiRecipe recipe = ForestRecipeSelection.choose(EmiApi.getRecipeManager().getRecipes(), EmiUtil.RANDOM::nextInt);
+			if (recipe != null) {
+				ForestManager.replaceSolo(recipe);
+				init();
+				return true;
 			}
 		} else if (EmiInput.isControlDown() && keyCode == GLFW.GLFW_KEY_C) {
 			ForestManager.clear();
