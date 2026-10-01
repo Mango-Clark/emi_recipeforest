@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Saved searches and Recipe Forest snapshots now share one persistent card order, preserving existing bookmarks when upgrading.
 - Saved bookmark tooltips explain restoration behavior and controls in English and Korean, using EMI's native multiline tooltips.
 - Saved bookmarks and current forest roots have separate EMI sidebar panels with native paging and drag reordering. The forest-add key removes hovered roots; saved bookmark order survives restarts.
+- Forest sidebar interactions respect EMI's hidden and resource-reload states.
 
 ## [0.1.0] - 2026-08-23
 

@@ -166,6 +166,9 @@ public abstract class EmiScreenManagerMixin {
 
     @Unique
     private static boolean recipeForest$addHoveredRecipe(int mouseX, int mouseY) {
+        if (EmiScreenManager.isDisabled() || EmiScreenBase.getCurrent().isEmpty()) {
+            return false;
+        }
         EmiStackInteraction hovered = EmiScreenManager.getHoveredStack(
                 mouseX, mouseY, true);
         if (hovered == null || hovered.isEmpty()) {
@@ -244,6 +247,11 @@ public abstract class EmiScreenManagerMixin {
                 recipeForest$clearDragState();
                 cir.setReturnValue(true);
             }
+            return;
+        }
+        if (EmiScreenManager.isDisabled() || EmiScreenBase.getCurrent().isEmpty()) {
+            recipeForest$clearDragState();
+            cir.setReturnValue(false);
             return;
         }
 
