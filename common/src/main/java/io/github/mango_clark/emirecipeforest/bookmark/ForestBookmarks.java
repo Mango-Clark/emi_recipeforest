@@ -24,6 +24,7 @@ import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.recipe.EmiRecipe;
 import dev.emi.emi.api.recipe.EmiResolutionRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
+import dev.emi.emi.config.SidebarType;
 import dev.emi.emi.screen.tooltip.EmiTooltip;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.stack.serializer.EmiIngredientSerializer;
@@ -593,6 +594,7 @@ public final class ForestBookmarks {
         } catch (IOException exception) {
             Constants.LOG.error("Could not save RecipeForest bookmarks to {}", target, exception);
         }
+        EmiScreenManager.repopulatePanels(SidebarType.EMPTY);
     }
 
     private static Path path() {
@@ -834,6 +836,7 @@ public final class ForestBookmarks {
             tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.search.description"));
             tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.search.apply"));
             tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.delete"));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.reorder"));
             return tooltip;
         }
     }
@@ -998,6 +1001,7 @@ public final class ForestBookmarks {
             tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.tree.apply"));
             tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.delete"));
             tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.rename"));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.reorder"));
             return tooltip;
         }
     }

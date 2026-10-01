@@ -111,6 +111,10 @@
   "tooltip.emi_recipeforest.amount.stacks": "Hold §6[alt]§r to show boxes, stacks, and remaining items",
 
   "tooltip.emi_recipeforest.bookmark.search": "§7Saved search:§r %s",
+  "sidebar.emi_recipeforest.saved": "Saved searches and forests",
+  "sidebar.emi_recipeforest.roots": "Current Recipe Forest roots",
+  "tooltip.emi_recipeforest.root.controls": "§6[Left Click]§r Select and open root\n§6[Right Click / Add Recipe to Forest key]§r Remove root\n§6[Drag]§r Reorder current forest",
+  "tooltip.emi_recipeforest.bookmark.reorder": "§6[Drag]§r Reorder saved bookmarks",
   "tooltip.emi_recipeforest.bookmark.search.description": "§7Stores an EMI search query.\nApplying it updates the current search.§r",
   "tooltip.emi_recipeforest.bookmark.search.apply": "§6[Left Click]§r Restore search",
   "tooltip.emi_recipeforest.bookmark.tree": "%s §7(%s roots)§r",

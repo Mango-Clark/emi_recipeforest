@@ -1,6 +1,7 @@
 package io.github.mango_clark.emirecipeforest.mixin;
 
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -14,6 +15,12 @@ import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.stack.EmiStackInteraction;
 import dev.emi.emi.config.EmiConfig;
 import dev.emi.emi.config.SidebarType;
+import dev.emi.emi.api.widget.Bounds;
+import dev.emi.emi.config.SidebarTheme;
+import dev.emi.emi.runtime.EmiDrawContext;
+import dev.emi.emi.screen.EmiScreenBase;
+import dev.emi.emi.screen.EmiScreenManager.SidebarPanel;
+import dev.emi.emi.screen.EmiScreenManager.ScreenSpace;
 import dev.emi.emi.input.EmiBind;
 import dev.emi.emi.input.EmiInput;
 import dev.emi.emi.screen.EmiScreenManager;
@@ -25,6 +32,8 @@ import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import io.github.mango_clark.emirecipeforest.input.ForestBind;
 import io.github.mango_clark.emirecipeforest.screen.BookmarkNameScreen;
 import io.github.mango_clark.emirecipeforest.screen.ForestScreen;
+import io.github.mango_clark.emirecipeforest.screen.ForestSidebar;
+import io.github.mango_clark.emirecipeforest.screen.ForestSidebar.RootCard;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
@@ -50,8 +59,20 @@ public abstract class EmiScreenManagerMixin {
     @Shadow
     private static EmiPlayerInventory lastPlayerInventory;
 
+    @Shadow
+    private static List<SidebarPanel> panels;
+    @Shadow private static List<Bounds> lastExclusion;
+
+    @Unique private static ForestSidebar recipeForest$saved;
+    @Unique private static ForestSidebar recipeForest$roots;
+
     @Inject(method = "<clinit>", at = @At("TAIL"))
     private static void recipeForest$replaceTreeButtonCallback(CallbackInfo ci) {
+        recipeForest$saved = new ForestSidebar(false);
+        recipeForest$roots = new ForestSidebar(true);
+        panels = new ArrayList<>(panels);
+        panels.add(recipeForest$saved);
+        panels.add(recipeForest$roots);
         EmiScreenManager.tree = new RecipeForestTreeButton(0, 0, button -> {
             if (ForestManager.isEmpty()) {
                 EmiApi.viewRecipeTree();
@@ -59,6 +80,64 @@ public abstract class EmiScreenManagerMixin {
                 ForestScreen.open();
             }
         });
+    }
+
+    @Inject(method = "recalculate", at = @At(value = "INVOKE",
+            target = "Ldev/emi/emi/screen/StackBatcher$ClaimedCollection;unclaimAll()V"))
+    private static void recipeForest$detachOldSpaces(CallbackInfo ci) {
+        recipeForest$saved.clearSpaces();
+        recipeForest$roots.clearSpaces();
+    }
+
+    @Inject(method = "recalculate", at = @At(value = "INVOKE",
+            target = "Ldev/emi/emi/screen/EmiScreenManager;updateSidebarButtons()V"))
+    private static void recipeForest$allocatePanels(CallbackInfo ci) {
+        SidebarPanel host = null;
+        for (int i = 0; i < 4; i++) {
+            SidebarPanel candidate = panels.get(i);
+            if (candidate.isVisible() && candidate.getType() != SidebarType.CHESS
+                    && candidate.supportsType(SidebarType.FAVORITES)) {
+                host = candidate;
+                break;
+            }
+        }
+        if (host == null || host.space == null) {
+            return;
+        }
+        ScreenSpace main = host.space;
+        int padding = host.theme.verticalPadding;
+        int rows = main.th >= 14 ? 2 : 1;
+        int height = 18 + rows * 18 + padding * 2 + 3;
+        int reservedRows = (height * 2 + 17) / 18;
+        if (main.th < reservedRows + 2) {
+            return;
+        }
+        // EMI has already constrained all four sidebars against the full host envelope.
+        // Partition that envelope only after layout; no other sidebar can overlap the additions.
+        List<Bounds> exclusion = lastExclusion;
+        List<ScreenSpace> oldSpaces = host.getSpaces();
+        List<ScreenSpace> subspaces = new ArrayList<>();
+        for (int i = 1; i < oldSpaces.size(); i++) {
+            ScreenSpace old = oldSpaces.get(i);
+            subspaces.add(new ScreenSpace(old.tx, old.ty - reservedRows * 18, old.tw, old.th,
+                    old.rtl, exclusion, old::getType, old.search));
+        }
+        ScreenSpace shortened = new ScreenSpace(main.tx, main.ty, main.tw, main.th - reservedRows,
+                main.rtl, exclusion, host::getType, host.isSearch());
+        host.setSpaces(shortened, subspaces);
+        ScreenSpace end = host.getSpaces().get(host.getSpaces().size() - 1);
+        int top = end.ty + end.th * 18 + padding * 2 + 3 + 18;
+        recipeForest$positionPanel(recipeForest$saved, main, top, rows, host.theme, exclusion);
+        recipeForest$positionPanel(recipeForest$roots, main, top + height, rows, host.theme, exclusion);
+    }
+
+    @Unique
+    private static void recipeForest$positionPanel(ForestSidebar panel, ScreenSpace host, int y, int rows,
+            SidebarTheme theme, List<Bounds> exclusion) {
+        panel.theme = theme;
+        panel.header = true;
+        panel.populate(new ScreenSpace(host.tx, y, host.tw, rows, host.rtl, exclusion,
+                () -> SidebarType.EMPTY, false), exclusion);
     }
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
@@ -93,12 +172,21 @@ public abstract class EmiScreenManagerMixin {
         if (hovered == null || hovered.isEmpty()) {
             return false;
         }
+        if (hovered.getStack() instanceof RootCard root) {
+            int index = root.index();
+            if (index >= 0) {
+                ForestManager.remove(index);
+                recipeForest$refreshPanels();
+            }
+            return true;
+        }
         EmiRecipe recipe = recipeForest$resolveRecipe(hovered);
         if (recipe == null || !recipe.supportsRecipeTree()) {
             return false;
         }
 
         ForestManager.add(recipe);
+        recipeForest$refreshPanels();
         return true;
     }
 
@@ -151,8 +239,9 @@ public abstract class EmiScreenManagerMixin {
     private static void recipeForest$handleBookmarkCard(double mouseX, double mouseY, int button,
             CallbackInfoReturnable<Boolean> cir) {
         EmiIngredient card = EmiScreenManager.pressedStack;
-        if (!recipeForest$isBookmarkCard(card)) {
-            if (recipeForest$isBookmarkCard(EmiScreenManager.draggedStack)) {
+        EmiIngredient dragged = EmiScreenManager.draggedStack;
+        if (!recipeForest$isOwnedCard(card)) {
+            if (recipeForest$isOwnedCard(dragged)) {
                 recipeForest$clearDragState();
                 cir.setReturnValue(true);
             }
@@ -160,11 +249,44 @@ public abstract class EmiScreenManagerMixin {
         }
 
         try {
+            if (!dragged.isEmpty()) {
+                SidebarPanel target = EmiScreenManager.getHoveredPanel((int) mouseX, (int) mouseY);
+                if (target instanceof ForestSidebar forest && forest.space != null
+                        && forest.getHoveredSpace((int) mouseX, (int) mouseY) == forest.space) {
+                    int edge = forest.space.getClosestEdge((int) mouseX, (int) mouseY)
+                            + forest.page * forest.space.pageSize;
+                    if (dragged instanceof RootCard root && forest.isRoots()) {
+                        int from = root.index();
+                        if (from >= 0) {
+                            int destination = edge > from ? edge - 1 : edge;
+                            ForestManager.move(from, Math.max(0, Math.min(destination, ForestManager.size() - 1)));
+                        }
+                    } else if (recipeForest$isBookmarkCard(dragged) && !forest.isRoots()) {
+                        ForestBookmarks.move(dragged, edge);
+                    }
+                    recipeForest$refreshPanels();
+                }
+                return;
+            }
+            if (EmiScreenManager.getHoveredStack((int) mouseX, (int) mouseY, true).getStack() != card) {
+                return;
+            }
+            if (card instanceof RootCard root) {
+                int index = root.index();
+                if (index >= 0 && button == 1) {
+                    ForestManager.remove(index);
+                    recipeForest$refreshPanels();
+                } else if (index >= 0 && button == 0) {
+                    ForestManager.select(index);
+                    ForestScreen.open();
+                }
+                return;
+            }
             if (button == 1) {
                 if (card instanceof TreeBookmark tree && EmiInput.isShiftDown()) {
                     BookmarkNameScreen.openForRename(tree);
                 } else if (ForestBookmarks.remove(card)) {
-                    EmiScreenManager.repopulatePanels(SidebarType.FAVORITES);
+                    recipeForest$refreshPanels();
                 }
             } else if (button == 0) {
                 boolean applied = ForestBookmarks.apply(card);
@@ -179,18 +301,40 @@ public abstract class EmiScreenManagerMixin {
             }
         } finally {
             recipeForest$clearDragState();
+            cir.setReturnValue(true);
         }
-        cir.setReturnValue(true);
     }
 
-    @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
-    private static void recipeForest$cancelBookmarkDrag(double mouseX, double mouseY, int button,
-            double deltaX, double deltaY, CallbackInfoReturnable<Boolean> cir) {
-        if (recipeForest$isBookmarkCard(EmiScreenManager.pressedStack)
-                || recipeForest$isBookmarkCard(EmiScreenManager.draggedStack)) {
-            recipeForest$clearDragState();
-            cir.setReturnValue(false);
+    @Inject(method = "renderDraggedStack", at = @At("HEAD"))
+    private static void recipeForest$drawInsertionEdge(EmiDrawContext context, int mouseX, int mouseY,
+            float delta, EmiScreenBase base, CallbackInfo ci) {
+        EmiIngredient dragged = EmiScreenManager.draggedStack;
+        if (!recipeForest$isOwnedCard(dragged)) {
+            return;
         }
+        SidebarPanel panel = EmiScreenManager.getHoveredPanel(mouseX, mouseY);
+        if (panel instanceof ForestSidebar forest && forest.space != null
+                && forest.getHoveredSpace(mouseX, mouseY) == forest.space
+                && (dragged instanceof RootCard) == forest.isRoots()) {
+            ScreenSpace space = forest.space;
+            int count = space.getStacks().size();
+            int start = forest.page * space.pageSize;
+            int edge = Math.min(space.getClosestEdge(mouseX, mouseY), Math.max(0, count - start));
+            context.push();
+            context.matrices().translate(0, 0, 200);
+            context.fill(space.getEdgeX(edge) - 1, space.getEdgeY(edge), 2, 18, 0xFF00FFFF);
+            context.pop();
+        }
+    }
+
+    @Unique
+    private static boolean recipeForest$isOwnedCard(EmiIngredient ingredient) {
+        return recipeForest$isBookmarkCard(ingredient) || ingredient instanceof RootCard;
+    }
+
+    @Unique
+    private static void recipeForest$refreshPanels() {
+        EmiScreenManager.repopulatePanels(SidebarType.EMPTY);
     }
 
     @Unique

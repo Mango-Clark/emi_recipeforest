@@ -16,7 +16,7 @@
     "RecipeTreeButtonWidgetMixin",
     "EmiReloadManagerMixin",
     "EmiFavoritesMixin",
-    "EmiSidebarsMixin",
+    "SidebarButtonWidgetMixin",
     "EmiSearchWidgetMixin",
     "EmiScreenManagerMixin",
     "EmiPersistentDataMixin",

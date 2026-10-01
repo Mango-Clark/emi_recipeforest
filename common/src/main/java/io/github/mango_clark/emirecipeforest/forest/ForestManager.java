@@ -19,6 +19,8 @@ import dev.emi.emi.bom.BoM;
 import dev.emi.emi.bom.FoldState;
 import dev.emi.emi.bom.MaterialNode;
 import dev.emi.emi.bom.MaterialTree;
+import dev.emi.emi.config.SidebarType;
+import dev.emi.emi.screen.EmiScreenManager;
 import io.github.mango_clark.emirecipeforest.Constants;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
@@ -455,6 +457,7 @@ public final class ForestManager {
     private static void synchronizeSelectedTree() {
         BoM.tree = getSelectedTree();
         BoM.craftingMode = craftingMode;
+        EmiScreenManager.repopulatePanels(SidebarType.EMPTY);
     }
 
     private static boolean containsIngredient(MaterialNode node, EmiIngredient ingredient) {

@@ -187,6 +187,11 @@ def emiCompatibilityContracts = [
                 [token: ' texture;', descriptor: 'Lnet/minecraft/resources/ResourceLocation;', access: 'protected']
         ],
         'dev.emi.emi.screen.EmiScreenManager': [
+                [token: ' panels;', descriptor: 'Ljava/util/List;', access: 'private static'],
+                [token: ' lastExclusion;', descriptor: 'Ljava/util/List;', access: 'private static'],
+                [token: ' recalculate(', descriptor: '()V', access: 'public static'],
+                [token: ' updateSidebarButtons(', descriptor: '()V', access: 'private static'],
+                [token: ' renderDraggedStack(', descriptor: '(Ldev/emi/emi/runtime/EmiDrawContext;IIFLdev/emi/emi/screen/EmiScreenBase;)V', access: 'private static'],
                 [token: ' keyPressed(', descriptor: '(III)Z', access: 'public static'],
                 [token: ' genericInteraction(', descriptor: '(Ljava/util/function/Function;)Z', access: 'public static'],
                 [token: ' stackInteraction(', descriptor: '(Ldev/emi/emi/api/stack/EmiStackInteraction;Ljava/util/function/Function;)Z', access: 'public static'],
@@ -202,6 +207,17 @@ def emiCompatibilityContracts = [
                 [token: ' lastPlayerInventory;', descriptor: 'Ldev/emi/emi/api/recipe/EmiPlayerInventory;', access: 'public static'],
                 [token: ' lastMouseX;', descriptor: 'I', access: 'public static'],
                 [token: ' lastMouseY;', descriptor: 'I', access: 'public static']
+        ],
+        'dev.emi.emi.screen.widget.SidebarButtonWidget': [
+                [token: 'SidebarButtonWidget(', descriptor: '(IIIILdev/emi/emi/screen/EmiScreenManager$SidebarPanel;)V', access: 'public'],
+                [token: ' panel;', descriptor: 'Ldev/emi/emi/screen/EmiScreenManager$SidebarPanel;', access: 'private final'],
+                [token: ' getU(', descriptor: '(II)I', access: 'protected'],
+                [token: ' getV(', descriptor: '(II)I', access: 'protected']
+        ],
+        'dev.emi.emi.screen.EmiScreenManager$ScreenSpace': [
+                [token: 'ScreenSpace(', descriptor: '(IIIIZLjava/util/List;Ljava/util/function/Supplier;Z)V', access: 'public'],
+                [token: ' getStacks(', descriptor: '()Ljava/util/List;', access: 'public'],
+                [token: ' getClosestEdge(', descriptor: '(II)I', access: 'public']
         ],
         'dev.emi.emi.config.EmiConfig$ConfigValue': [
                 [token: ' value(', descriptor: '()Ljava/lang/String;', access: 'public abstract']

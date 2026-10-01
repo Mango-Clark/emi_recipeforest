@@ -123,8 +123,14 @@ public final class EmiCompatibility {
                 requireMethod(targetClass, "reload", "()V", true, missing);
                 requireMethod(targetClass, "isLoaded", "()Z", true, missing);
             }
-            case "dev.emi.emi.runtime.EmiFavorites" -> requireMethod(targetClass, "updateSynthetic",
-                    "(Ldev/emi/emi/api/recipe/EmiPlayerInventory;)V", true, missing);
+            case "dev.emi.emi.runtime.EmiFavorites" -> {
+                requireMethod(targetClass, "updateSynthetic",
+                        "(Ldev/emi/emi/api/recipe/EmiPlayerInventory;)V", true, missing);
+                requireMethod(targetClass, "addFavorite",
+                        "(Ldev/emi/emi/api/stack/EmiIngredient;Ldev/emi/emi/api/recipe/EmiRecipe;)V", true, missing);
+                requireMethod(targetClass, "addFavoriteAt",
+                        "(Ldev/emi/emi/api/stack/EmiIngredient;I)V", true, missing);
+            }
             case "dev.emi.emi.runtime.EmiSidebars" -> requireMethod(targetClass, "getStacks",
                     "(Ldev/emi/emi/config/SidebarType;)Ljava/util/List;", true, missing);
             case "dev.emi.emi.screen.widget.EmiSearchWidget" ->
@@ -187,6 +193,14 @@ public final class EmiCompatibility {
                 requirePrivateMethod(targetClass, "push", "()V", true, missing);
             }
             case "dev.emi.emi.screen.EmiScreenManager" -> {
+                requirePrivateField(targetClass, "panels", "Ljava/util/List;", true, missing);
+                requirePrivateField(targetClass, "lastExclusion", "Ljava/util/List;", true, missing);
+                requireMethod(targetClass, "recalculate", "()V", true, missing);
+                requirePrivateMethod(targetClass, "updateSidebarButtons", "()V", true, missing);
+                requirePrivateMethod(targetClass, "renderDraggedStack",
+                        "(Ldev/emi/emi/runtime/EmiDrawContext;IIFLdev/emi/emi/screen/EmiScreenBase;)V", true, missing);
+                requireMethod(targetClass, "getHoveredPanel",
+                        "(II)Ldev/emi/emi/screen/EmiScreenManager$SidebarPanel;", true, missing);
                 requireMethod(targetClass, "keyPressed", "(III)Z", true, missing);
                 requireMethod(targetClass, "genericInteraction", "(Ljava/util/function/Function;)Z", true, missing);
                 requireMethod(targetClass, "stackInteraction",
@@ -208,6 +222,13 @@ public final class EmiCompatibility {
                 requireField(targetClass, "lastMouseY", "I", true, missing);
                 requireMethodInvocations(targetClass, "genericInteraction", "(Ljava/util/function/Function;)Z",
                         Opcodes.INVOKESTATIC, "dev/emi/emi/api/EmiApi", "viewRecipeTree", "()V", 1, missing);
+            }
+            case "dev.emi.emi.screen.widget.SidebarButtonWidget" -> {
+                requirePrivateField(targetClass, "panel", "Ldev/emi/emi/screen/EmiScreenManager$SidebarPanel;", false, missing);
+                requireMethod(targetClass, "<init>",
+                        "(IIIILdev/emi/emi/screen/EmiScreenManager$SidebarPanel;)V", false, missing);
+                requireProtectedMethod(targetClass, "getU", "(II)I", false, missing);
+                requireProtectedMethod(targetClass, "getV", "(II)I", false, missing);
             }
             case "dev.emi.emi.runtime.EmiPersistentData" ->
                     requireMethod(targetClass, "load", "()V", true, missing);

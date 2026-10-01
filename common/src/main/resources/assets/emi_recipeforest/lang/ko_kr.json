@@ -111,6 +111,10 @@
   "tooltip.emi_recipeforest.amount.stacks": "§6[alt]§r를 누르면 박스, 스택, 남은 아이템 수를 표시합니다",
 
   "tooltip.emi_recipeforest.bookmark.search": "§7저장된 검색:§r %s",
+  "sidebar.emi_recipeforest.saved": "저장된 검색 및 제작법 숲",
+  "sidebar.emi_recipeforest.roots": "현재 제작법 숲의 루트",
+  "tooltip.emi_recipeforest.root.controls": "§6[좌클릭]§r 루트 선택 및 열기\n§6[우클릭 / 제작법 숲에 추가 키]§r 루트 제거\n§6[드래그]§r 현재 제작법 숲 순서 변경",
+  "tooltip.emi_recipeforest.bookmark.reorder": "§6[드래그]§r 저장된 북마크 순서 변경",
   "tooltip.emi_recipeforest.bookmark.search.description": "§7EMI 검색어를 저장합니다.\n적용하면 현재 검색어가 바뀝니다.§r",
   "tooltip.emi_recipeforest.bookmark.search.apply": "§6[좌클릭]§r 검색어 복원",
   "tooltip.emi_recipeforest.bookmark.tree": "%s §7(루트 %s개)§r",

@@ -261,7 +261,10 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 package dev.emi.emi.api.stack.serializer; public interface EmiIngredientSerializer<T extends dev.emi.emi.api.stack.EmiIngredient> { public static com.google.gson.JsonElement getSerialized(dev.emi.emi.api.stack.EmiIngredient value){if(value==null||value.isEmpty())return null;var stack=value.getEmiStacks().get(0);var object=new com.google.gson.JsonObject();object.addProperty("stack",stack.toString());return object;} public static dev.emi.emi.api.stack.EmiIngredient getDeserialized(com.google.gson.JsonElement value){if(value==null||!value.isJsonObject())return dev.emi.emi.api.stack.EmiStack.EMPTY;String encoded=value.getAsJsonObject().get("stack").getAsString();int split=encoded.lastIndexOf('x');if(split<0)return dev.emi.emi.api.stack.EmiStack.EMPTY;return new dev.emi.emi.api.stack.EmiStack(encoded.substring(0,split),Long.parseLong(encoded.substring(split+1)));} }
                 """),
             Map.entry("dev.emi.emi.screen.EmiScreenManager", """
-                package dev.emi.emi.screen; public final class EmiScreenManager { public static final Search search=new Search(); public static final class Search { public void setValue(String value){} } }
+                package dev.emi.emi.screen; public final class EmiScreenManager { public static final Search search=new Search(); public static void repopulatePanels(dev.emi.emi.config.SidebarType type){} public static final class Search { public void setValue(String value){} } }
+                """),
+            Map.entry("dev.emi.emi.config.SidebarType", """
+                package dev.emi.emi.config; public enum SidebarType { EMPTY }
                 """),
             Map.entry("org.slf4j.Logger", """
                 package org.slf4j; public interface Logger { default void warn(String message,Object arg){} default void warn(String message,Throwable error){} default void error(String message,Object first,Object second){} }
