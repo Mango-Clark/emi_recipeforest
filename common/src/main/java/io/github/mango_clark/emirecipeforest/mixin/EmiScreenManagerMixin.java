@@ -136,8 +136,7 @@ public abstract class EmiScreenManagerMixin {
             SidebarTheme theme, List<Bounds> exclusion) {
         panel.theme = theme;
         panel.header = true;
-        panel.populate(new ScreenSpace(host.tx, y, host.tw, rows, host.rtl, exclusion,
-                () -> SidebarType.EMPTY, false), exclusion);
+        panel.populate(host.tx, y, host.tw, rows, host.rtl, exclusion);
     }
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)

@@ -66,11 +66,15 @@ public final class ForestSidebar extends SidebarPanel {
     }
 
     /**
-     * @param template native grid geometry allocated for this panel
+     * @param x native grid left coordinate
+     * @param y native grid top coordinate
+     * @param columns native grid column count
+     * @param rows native grid row count
+     * @param rtl native horizontal ordering
      * @param exclusion native screen exclusions
      */
-    public void populate(ScreenSpace template, List<Bounds> exclusion) {
-        setSpaces(new CardSpace(template, exclusion, this::cards), List.of());
+    public void populate(int x, int y, int columns, int rows, boolean rtl, List<Bounds> exclusion) {
+        setSpaces(new CardSpace(x, y, columns, rows, rtl, exclusion, this::cards), List.of());
     }
 
     private List<? extends EmiIngredient> cards() {
@@ -89,10 +93,9 @@ public final class ForestSidebar extends SidebarPanel {
     private static final class CardSpace extends ScreenSpace {
         private final Supplier<List<? extends EmiIngredient>> cards;
 
-        private CardSpace(ScreenSpace template, List<Bounds> exclusion,
+        private CardSpace(int x, int y, int columns, int rows, boolean rtl, List<Bounds> exclusion,
                 Supplier<List<? extends EmiIngredient>> cards) {
-            super(template.tx, template.ty, template.tw, template.th, template.rtl, exclusion,
-                    () -> SidebarType.EMPTY, false);
+            super(x, y, columns, rows, rtl, exclusion, () -> SidebarType.EMPTY, false);
             this.cards = cards;
         }
 
