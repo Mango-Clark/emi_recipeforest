@@ -86,6 +86,13 @@ final class IsolatedEmiRuntime implements AutoCloseable {
             Map.entry("net.minecraft.client.gui.GuiGraphics", """
                 package net.minecraft.client.gui; public class GuiGraphics {}
                 """),
+            Map.entry("dev.emi.emi.screen.tooltip.EmiTooltip", """
+                package dev.emi.emi.screen.tooltip;
+                public class EmiTooltip {
+                    public static java.util.List<net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent>
+                            splitTranslate(String key, Object... args) { return java.util.List.of(); }
+                }
+                """),
             Map.entry("net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent", """
                 package net.minecraft.client.gui.screens.inventory.tooltip;
                 public class ClientTooltipComponent { public static ClientTooltipComponent create(Object text) { return new ClientTooltipComponent(); } }

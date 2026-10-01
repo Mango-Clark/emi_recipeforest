@@ -111,9 +111,13 @@
   "tooltip.emi_recipeforest.amount.stacks": "§6[alt]§r를 누르면 박스, 스택, 남은 아이템 수를 표시합니다",
 
   "tooltip.emi_recipeforest.bookmark.search": "§7저장된 검색:§r %s",
+  "tooltip.emi_recipeforest.bookmark.search.description": "§7EMI 검색어를 저장합니다.\n적용하면 현재 검색어가 바뀝니다.§r",
+  "tooltip.emi_recipeforest.bookmark.search.apply": "§6[좌클릭]§r 검색어 복원",
   "tooltip.emi_recipeforest.bookmark.tree": "%s §7(루트 %s개)§r",
+  "tooltip.emi_recipeforest.bookmark.tree.description": "§7제작법 숲의 상태를 저장합니다.\n적용하면 현재 제작법 숲을 교체합니다.§r",
+  "tooltip.emi_recipeforest.bookmark.tree.apply": "§6[좌클릭]§r 제작법 숲 복원 및 열기",
   "tooltip.emi_recipeforest.bookmark.apply": "§6[좌클릭]§r 북마크 적용",
   "tooltip.emi_recipeforest.bookmark.delete": "§6[우클릭]§r 북마크 삭제",
-  "tooltip.emi_recipeforest.bookmark.rename": "§6[shift + 우클릭]§r 북마크 이름 변경",
+  "tooltip.emi_recipeforest.bookmark.rename": "§6[Shift + 우클릭]§r 북마크 이름 변경",
   "message.emi_recipeforest.bookmark.invalid": "이 북마크에는 현재 월드에서 사용할 수 있는 제작법이 없습니다"
 }

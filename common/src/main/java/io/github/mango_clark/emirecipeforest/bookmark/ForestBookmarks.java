@@ -24,6 +24,7 @@ import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.recipe.EmiRecipe;
 import dev.emi.emi.api.recipe.EmiResolutionRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
+import dev.emi.emi.screen.tooltip.EmiTooltip;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.stack.serializer.EmiIngredientSerializer;
 import dev.emi.emi.bom.FoldState;
@@ -35,7 +36,6 @@ import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Items;
 
 /** Addon-owned search and forest bookmarks, independent of EMI's emi.json. */
@@ -829,10 +829,12 @@ public final class ForestBookmarks {
 
         @Override
         public List<ClientTooltipComponent> getTooltip() {
-            return List.of(
-                tooltip(Component.translatable("tooltip.emi_recipeforest.bookmark.search", query)),
-                tooltip(Component.translatable("tooltip.emi_recipeforest.bookmark.apply")),
-                tooltip(Component.translatable("tooltip.emi_recipeforest.bookmark.delete")));
+            List<ClientTooltipComponent> tooltip = new ArrayList<>(
+                    EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.search", query));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.search.description"));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.search.apply"));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.delete"));
+            return tooltip;
         }
     }
 
@@ -990,16 +992,14 @@ public final class ForestBookmarks {
 
         @Override
         public List<ClientTooltipComponent> getTooltip() {
-            return List.of(
-                tooltip(Component.translatable("tooltip.emi_recipeforest.bookmark.tree", name, roots.size())),
-                tooltip(Component.translatable("tooltip.emi_recipeforest.bookmark.apply")),
-                tooltip(Component.translatable("tooltip.emi_recipeforest.bookmark.delete")),
-                tooltip(Component.translatable("tooltip.emi_recipeforest.bookmark.rename")));
+            List<ClientTooltipComponent> tooltip = new ArrayList<>(
+                    EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.tree", name, roots.size()));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.tree.description"));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.tree.apply"));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.delete"));
+            tooltip.addAll(EmiTooltip.splitTranslate("tooltip.emi_recipeforest.bookmark.rename"));
+            return tooltip;
         }
-    }
-
-    private static ClientTooltipComponent tooltip(Component component) {
-        return ClientTooltipComponent.create(component.getVisualOrderText());
     }
 
     private static final class RootSnapshot {
