@@ -219,6 +219,15 @@ def emiCompatibilityContracts = [
                 [token: ' getStacks(', descriptor: '()Ljava/util/List;', access: 'public'],
                 [token: ' getClosestEdge(', descriptor: '(II)I', access: 'public']
         ],
+        'dev.emi.emi.screen.EmiScreenManager$SidebarPanel': [
+                [token: 'SidebarPanel(', descriptor: '(Ldev/emi/emi/config/SidebarSide;Ldev/emi/emi/config/SidebarPages;)V', access: 'public'],
+                [token: ' getSpaces(', descriptor: '()Ljava/util/List;', access: 'public'],
+                [token: ' setSpaces(', descriptor: '(Ldev/emi/emi/screen/EmiScreenManager$ScreenSpace;Ljava/util/List;)V', access: 'public'],
+                [token: ' getHoveredSpace(', descriptor: '(II)Ldev/emi/emi/screen/EmiScreenManager$ScreenSpace;', access: 'public'],
+                [token: ' supportsType(', descriptor: '(Ldev/emi/emi/config/SidebarType;)Z', access: 'public'],
+                [token: ' isSearch(', descriptor: '()Z', access: 'public'],
+                [token: ' cycleType(', descriptor: '(I)V', access: 'public']
+        ],
         'dev.emi.emi.config.EmiConfig$ConfigValue': [
                 [token: ' value(', descriptor: '()Ljava/lang/String;', access: 'public abstract']
         ],
