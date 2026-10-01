@@ -71,7 +71,6 @@ import io.github.mango_clark.emirecipeforest.mixin.EmiApiMixin;
 
 /** Multi-root replacement for EMI's recipe tree screen. */
 public class ForestScreen extends BoMScreen {
-	private static final int NODE_WIDTH = 30;
 	private static final int NODE_HORIZONTAL_SPACING = 8;
 	private static final int NODE_VERTICAL_SPACING = 20;
 	private static final int COST_HORIZONTAL_SPACING = 8;
@@ -101,7 +100,7 @@ public class ForestScreen extends BoMScreen {
 	private boolean hasRemainders = false;;
 	private int page;
 	private int rootListScroll;
-	private int nodeWidth = 0;
+	private ForestViewport horizontalBounds = new ForestViewport();
 	private int nodeHeight = 0;
 	private int lastMouseX, lastMouseY;
 	private double scrollAcc = 0;
@@ -192,7 +191,6 @@ public class ForestScreen extends BoMScreen {
 				batches = new Bounds(node.x + node.width / 2 + 6, node.y - 10, width + 12, 22);
 			}
 
-			nodeWidth = volume.getMaxRight() - volume.getMinLeft();
 			nodeHeight = getNodeHeight(selectedTree.goal);
 			playerInv = nextInventory;
 			TreeCost progressTreeCost = forestCosts.getProgress();
@@ -272,13 +270,37 @@ public class ForestScreen extends BoMScreen {
 			nodes = Lists.newArrayList();
 			costs = Lists.newArrayList();
 			hasRemainders = false;
-			nodeWidth = 0;
 			nodeHeight = 0;
 			playerInv = null;
 		}
+		updateHorizontalBounds();
 		batcher.repopulate();
 		lastCalculatedTree = selectedTree;
 		lastCalculatedForestEmpty = forestEmpty;
+	}
+
+	private void updateHorizontalBounds() {
+		ForestViewport bounds = new ForestViewport();
+		for (Node node : nodes) {
+			// Node width already includes normal or Alt quantity labels.
+			bounds.include(node.x - node.width / 2, node.x + node.width - node.width / 2 + 2);
+		}
+		for (Cost cost : costs) {
+			// Costs and remainders share this list and the same centered coordinates.
+			// EMI renders text at x + 17; include the final shadow pixel too.
+			bounds.include(cost.x, cost.x + 18 + cost.getReservedAmountOverflow());
+		}
+		if (!nodes.isEmpty()) {
+			bounds.include(batches.x(), batches.x() + batches.width());
+			bounds.include(mode.x(), mode.x() + mode.width());
+			int labelWidth = font.width(EmiPort.translatable("emi.total_cost"));
+			bounds.include(-labelWidth / 2, labelWidth - labelWidth / 2 + 1);
+			if (hasRemainders) {
+				labelWidth = font.width(EmiPort.translatable("emi.leftovers"));
+				bounds.include(-labelWidth / 2, labelWidth - labelWidth / 2 + 1);
+			}
+		}
+		horizontalBounds = bounds;
 	}
 
 	private int rootsPerPage() {
@@ -374,15 +396,12 @@ public class ForestScreen extends BoMScreen {
 		lastMouseX = mouseX;
 		lastMouseY = mouseY;
 		float scale = getScale();
-		int scaledWidth = (int) (Math.max(1, rootPanelLeft()) / scale);
 		int scaledHeight = (int) (height / scale);
-		// TODO should be the ingredient width if higher
-		int contentWidth = nodeWidth * NODE_WIDTH;
 		int contentHeight = nodeHeight * NODE_VERTICAL_SPACING + 80;
-		int xBound = scaledWidth / 2 + contentWidth - 100;
 		int topBound = scaledHeight * 1 / -2 + 20;
 		int bottomBound = contentHeight + scaledHeight / 2 - 20;
-		offX = Mth.clamp(offX, -xBound, xBound);
+		offX = horizontalBounds.clampOffset(offX, -contentCenterX() / scale,
+			(rootPanelLeft() - contentCenterX()) / scale);
 		offY = Mth.clamp(offY, -bottomBound, -topBound);
 
 		boolean panelHovered = rootPanelContains(mouseX, mouseY);

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Forest batch changes and bookmark restoration reject quantities outside the calculation range while preserving the previous forest. Material costs, chance quantities, and recipe rounding retain precision for large counts.
 - Ctrl+R selects a supported recipe in one pass instead of retrying random recipes up to 100,000 times.
+- Forest horizontal panning includes the actual node, material-cost, leftover, and quantity-label extents at the current zoom.
 
 ### Changed
 
