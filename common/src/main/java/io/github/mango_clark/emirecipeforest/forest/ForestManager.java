@@ -2,15 +2,18 @@ package io.github.mango_clark.emirecipeforest.forest;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.ToLongFunction;
 
 import com.google.gson.JsonElement;
 
 import dev.emi.emi.EmiPort;
 import dev.emi.emi.api.EmiApi;
+import dev.emi.emi.api.recipe.EmiPlayerInventory;
 import dev.emi.emi.api.recipe.EmiRecipe;
 import dev.emi.emi.api.recipe.EmiResolutionRecipe;
 import dev.emi.emi.api.stack.EmiIngredient;
@@ -24,6 +27,8 @@ import dev.emi.emi.screen.EmiScreenManager;
 import io.github.mango_clark.emirecipeforest.Constants;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 /**
  * Owns the live, session-only collection of recipe trees.
@@ -106,12 +111,90 @@ public final class ForestManager {
     }
 
     /**
+     * Validates all candidate quantities before changing any live root.
+     *
+     * @param targets roots whose batches change
+     * @param adjustment candidate batch calculation
+     * @return whether the entire change was accepted
+     */
+    public static boolean tryChangeBatches(List<MaterialTree> targets, ToLongFunction<MaterialTree> adjustment) {
+        Map<MaterialTree, Long> candidates = new IdentityHashMap<>();
+        try {
+            for (MaterialTree tree : targets) {
+                if (identityIndexOf(tree) < 0) {
+                    throw new IllegalArgumentException("Batch target is not a live forest root");
+                }
+                candidates.put(tree, adjustment.applyAsLong(tree));
+            }
+            ForestCosts.validateAmounts(TREES, candidates, currentInventory());
+        } catch (ArithmeticException exception) {
+            reportAmountLimit();
+            return false;
+        }
+        if (candidates.entrySet().stream().allMatch(entry -> entry.getKey().batches == entry.getValue())) {
+            return false;
+        }
+        candidates.forEach((tree, batches) -> tree.batches = batches);
+        synchronizeSelectedTree();
+        return true;
+    }
+
+    /**
+     * Commits a prepared bookmark only if its entire forest is representable.
+     *
+     * @param trees prepared native EMI trees
+     * @param selection requested selected root
+     * @param crafting requested crafting mode
+     * @return whether the replacement was accepted
+     */
+    public static boolean replaceTrees(List<MaterialTree> trees, int selection, boolean crafting) {
+        List<MaterialTree> prepared = List.copyOf(trees);
+        if (prepared.isEmpty() || !acceptsTrees(prepared)) {
+            return false;
+        }
+        reloadSnapshot = null;
+        cancelPendingResolution();
+        TREES.clear();
+        TREES.addAll(prepared);
+        selectedIndex = Math.max(0, Math.min(selection, TREES.size() - 1));
+        craftingMode = crafting;
+        synchronizeSelectedTree();
+        return true;
+    }
+
+    /** Shows the native client notification for an unrepresentable forest quantity. */
+    public static void reportAmountLimit() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            client.player.displayClientMessage(Component.translatable("message.emi_recipeforest.amount_limit"), false);
+        }
+    }
+
+    private static boolean acceptsTrees(List<MaterialTree> trees) {
+        try {
+            ForestCosts.validateAmounts(trees, Map.of(), currentInventory());
+            return true;
+        } catch (ArithmeticException exception) {
+            reportAmountLimit();
+            return false;
+        }
+    }
+
+    private static EmiPlayerInventory currentInventory() {
+        Minecraft client = Minecraft.getInstance();
+        return client.player == null ? null : EmiPlayerInventory.of(client.player);
+    }
+
+    /**
      * Replaces the forest with EMI's canonical tree for the supplied goal.
      *
      * @param recipe recipe that becomes the only root
      */
     public static void replaceSolo(EmiRecipe recipe) {
         Objects.requireNonNull(recipe, "recipe");
+        if (!acceptsTrees(List.of(new MaterialTree(recipe)))) {
+            return;
+        }
         cancelPendingResolution();
         synchronizingGoal = true;
         try {
@@ -140,6 +223,10 @@ public final class ForestManager {
         if (synchronizingGoal) {
             return;
         }
+        if (BoM.tree != null && !acceptsTrees(List.of(BoM.tree))) {
+            synchronizeSelectedTree();
+            return;
+        }
         cancelPendingResolution();
         TREES.clear();
         if (BoM.tree != null) {
@@ -163,16 +250,21 @@ public final class ForestManager {
      * Appends and selects a new root, or initializes EMI's canonical tree when empty.
      *
      * @param recipe supported root recipe
-     * @return newly selected material tree
+     * @return newly selected material tree, or {@code null} if its quantities overflow
      */
     public static MaterialTree add(EmiRecipe recipe) {
         Objects.requireNonNull(recipe, "recipe");
-        cancelPendingResolution();
         if (TREES.isEmpty()) {
             replaceSolo(recipe);
             return getSelectedTree();
         }
         MaterialTree tree = new MaterialTree(recipe);
+        List<MaterialTree> candidate = new ArrayList<>(TREES);
+        candidate.add(tree);
+        if (!acceptsTrees(candidate)) {
+            return null;
+        }
+        cancelPendingResolution();
         TREES.add(tree);
         selectedIndex = TREES.size() - 1;
         synchronizeSelectedTree();
@@ -233,6 +325,11 @@ public final class ForestManager {
             return null;
         }
 
+        List<MaterialTree> candidate = new ArrayList<>(TREES);
+        candidate.remove(index);
+        if (!acceptsTrees(candidate)) {
+            return null;
+        }
         cancelPendingResolution();
         MaterialTree selected = getSelectedTree();
         boolean removingSelected = TREES.get(index) == selected;
@@ -262,6 +359,12 @@ public final class ForestManager {
         }
         if (fromIndex == toIndex) {
             return true;
+        }
+
+        List<MaterialTree> candidate = new ArrayList<>(TREES);
+        candidate.add(toIndex, candidate.remove(fromIndex));
+        if (!acceptsTrees(candidate)) {
+            return false;
         }
 
         cancelPendingResolution();
@@ -316,6 +419,11 @@ public final class ForestManager {
                 tree.batches = root.batches;
                 root.restoreResolutions(tree);
                 root.restoreFolds(tree.goal);
+                List<MaterialTree> candidate = new ArrayList<>(TREES);
+                candidate.add(tree);
+                if (!acceptsTrees(candidate)) {
+                    continue;
+                }
                 if (root.originalIndex == snapshot.selectedIndex) {
                     restoredSelected = TREES.size();
                 }

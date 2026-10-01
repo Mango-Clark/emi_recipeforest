@@ -545,6 +545,7 @@ public final class EmiCompatibility {
             List<String> missing = new ArrayList<>();
             ClassNode materialNode = readClass("dev/emi/emi/bom/MaterialNode", missing);
             ClassNode treeCost = readClass("dev/emi/emi/bom/TreeCost", missing);
+            ClassNode chanceCost = readClass("dev/emi/emi/bom/ChanceMaterialCost", missing);
             ClassNode synthetic = readClass("dev/emi/emi/runtime/EmiFavorite$Synthetic", missing);
             ClassNode bomScreen = readClass("dev/emi/emi/screen/BoMScreen", missing);
             ClassNode sizedButton = readClass("dev/emi/emi/screen/widget/SizedButtonWidget", missing);
@@ -583,6 +584,18 @@ public final class EmiCompatibility {
             ClassNode emiPort = readClass("dev/emi/emi/EmiPort", missing);
 
             boolean modernCatalyst = hasPublicField(materialNode, "catalyst", "Z", false);
+            requireMethod(treeCost, "gcd", "(JJ)J", false, missing);
+            requireExtensibleClass(chanceCost, missing);
+            requireMethod(chanceCost, "<init>", "(Ldev/emi/emi/api/stack/EmiIngredient;JF)V", false, missing);
+            requireField(chanceCost, "minBatch", "J", false, missing);
+            requireField(chanceCost, "chance", "F", false, missing);
+            requireMethod(chanceCost, "getEffectiveAmount", "()J", false, missing);
+            requireMethod(chanceCost, "merge", "(JF)V", false, missing);
+            if (chanceCost != null && chanceCost.methods.stream().anyMatch(method ->
+                    (method.access & Opcodes.ACC_FINAL) != 0
+                            && (method.name.equals("getEffectiveAmount") || method.name.equals("merge")))) {
+                missing.add("non-final ChanceMaterialCost.getEffectiveAmount and merge");
+            }
             boolean legacyCatalyst = hasPublicMethod(treeCost, "isCatalyst",
                     "(Ldev/emi/emi/api/stack/EmiIngredient;)Z", true);
             if (!modernCatalyst && !legacyCatalyst) {

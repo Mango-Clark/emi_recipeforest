@@ -1,6 +1,12 @@
 package io.github.mango_clark.emirecipeforest.forest;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 import dev.emi.emi.api.recipe.EmiPlayerInventory;
 import dev.emi.emi.api.recipe.EmiRecipe;
@@ -46,27 +52,29 @@ public final class ForestCosts {
      * @param inventory player inventory, or {@code null} for an empty inventory
      */
     public void calculate(List<MaterialTree> trees, EmiPlayerInventory inventory) {
-        Accumulator progressAccumulator = new Accumulator(progress);
-        progressAccumulator.clear();
+        TreeCost nextProgress = new TreeCost();
+        TreeCost nextTotal = new TreeCost();
+        Accumulator progressAccumulator = withInventory(nextProgress, inventory);
+        calculateTrees(progressAccumulator, trees, Map.of(), true);
+        calculateTrees(new Accumulator(nextTotal), trees, Map.of(), false);
+        // Publish only after both passes succeed, including deferred native node progress.
+        copyCosts(nextTotal, total);
+        copyCosts(nextProgress, progress);
+        progressAccumulator.updates.forEach((node, update) -> {
+            node.progress = update.progress;
+            node.totalNeeded = update.totalNeeded;
+            node.neededBatches = update.neededBatches;
+        });
+    }
+
+    private static Accumulator withInventory(TreeCost nextProgress, EmiPlayerInventory inventory) {
         if (inventory != null) {
             for (EmiStack stack : inventory.inventory.values()) {
                 EmiStack copy = stack.copy();
-                progress.remainders.put(copy, new FlatMaterialCost(copy, copy.getAmount()));
+                nextProgress.remainders.put(copy, new FlatMaterialCost(copy, copy.getAmount()));
             }
         }
-        for (MaterialTree tree : trees) {
-            if (tree != null && tree.goal != null) {
-                progressAccumulator.calculate(tree.goal, tree.batches, true);
-            }
-        }
-
-        Accumulator totalAccumulator = new Accumulator(total);
-        totalAccumulator.clear();
-        for (MaterialTree tree : trees) {
-            if (tree != null && tree.goal != null) {
-                totalAccumulator.calculate(tree.goal, tree.batches, false);
-            }
-        }
+        return new Accumulator(nextProgress);
     }
 
     /**
@@ -82,32 +90,140 @@ public final class ForestCosts {
         return costs;
     }
 
+    /**
+     * Checks candidate batch counts without changing costs or native node progress.
+     * @param trees ordered forest roots
+     * @param candidateBatches overrides for roots being changed
+     * @throws ArithmeticException when a quantity cannot be represented
+     */
+    public static void validateAmounts(List<MaterialTree> trees, Map<MaterialTree, Long> candidateBatches) {
+        calculateTrees(new Accumulator(new TreeCost()), trees, candidateBatches, false);
+    }
+
+    /** Checks inventory-dependent costs too, without publishing native progress.
+     * @param trees ordered roots
+     * @param candidateBatches proposed batches
+     * @param inventory current inventory, or null
+     */
+    public static void validateAmounts(List<MaterialTree> trees, Map<MaterialTree, Long> candidateBatches,
+            EmiPlayerInventory inventory) {
+        validateAmounts(trees, candidateBatches);
+        if (inventory != null) {
+            calculateTrees(withInventory(new TreeCost(), inventory), trees, candidateBatches, false);
+        }
+    }
+
+    private static void calculateTrees(Accumulator accumulator, List<MaterialTree> trees,
+            Map<MaterialTree, Long> batches, boolean trackProgress) {
+        for (MaterialTree tree : trees) {
+            if (tree != null && tree.goal != null) {
+                long count = batches.getOrDefault(tree, tree.batches);
+                if (count < 1) {
+                    throw new ArithmeticException("Invalid batch count");
+                }
+                accumulator.calculate(tree.goal, count, trackProgress);
+            }
+        }
+    }
+
+    private static void copyCosts(TreeCost source, TreeCost target) {
+        target.costs.clear();
+        target.costs.putAll(source.costs);
+        target.chanceCosts.clear();
+        target.chanceCosts.putAll(source.chanceCosts);
+        target.remainders.clear();
+        target.remainders.putAll(source.remainders);
+        target.chanceRemainders.clear();
+        target.chanceRemainders.putAll(source.chanceRemainders);
+    }
+
+    /**
+     * Returns the completed expected quantity without float narrowing.
+     * @param original total cost
+     * @param remaining remaining cost, or null when complete
+     * @return completed amount rounded upward, as in EMI's progress display
+     */
+    public static long completedAmount(FlatMaterialCost original, FlatMaterialCost remaining) {
+        if (remaining == null) {
+            return original.getEffectiveAmount();
+        }
+        return expected(original).subtract(expected(remaining)).max(BigDecimal.ZERO)
+                .setScale(0, RoundingMode.CEILING).longValueExact();
+    }
+
+    private static BigDecimal expected(FlatMaterialCost cost) {
+        if (cost instanceof ExactChanceMaterialCost exact) {
+            return exact.expected;
+        }
+        return cost instanceof ChanceMaterialCost chance
+                ? BigDecimal.valueOf(cost.amount).multiply(ForestAmounts.decimalChance(chance.chance))
+                : BigDecimal.valueOf(cost.amount);
+    }
+
+    // EMI owns the cost model. Only the expected quantity needs a wider intermediate;
+    // inherited amount/chance remain available to EMI renderers and tooltips.
+    private static final class ExactChanceMaterialCost extends ChanceMaterialCost {
+        private BigDecimal expected;
+
+        private ExactChanceMaterialCost(EmiIngredient ingredient, long amount, BigDecimal chance) {
+            super(ingredient, amount, chance.floatValue());
+            expected = ForestAmounts.checkExpected(BigDecimal.valueOf(amount).multiply(chance));
+        }
+
+        private void mergeExact(long amount, BigDecimal chance) {
+            long sum = Math.addExact(this.amount, amount);
+            BigDecimal next = ForestAmounts.checkExpected(expected.add(BigDecimal.valueOf(amount).multiply(chance)));
+            this.amount = sum;
+            expected = next;
+            this.chance = sum == 0 ? 0 : next.divide(BigDecimal.valueOf(sum), PRECISION).floatValue();
+        }
+
+        @Override
+        public void merge(long amount, float chance) {
+            mergeExact(amount, ForestAmounts.decimalChance(chance));
+        }
+
+        private void setExpected(BigDecimal value) {
+            expected = ForestAmounts.checkExpected(value);
+            amount = 1;
+            chance = value.floatValue();
+        }
+
+        @Override
+        public long getEffectiveAmount() {
+            return Math.max(minBatch, ForestAmounts.roundExpected(expected));
+        }
+    }
+
+    private static final MathContext PRECISION = new MathContext(50);
+
+    private static final class NodeProgress {
+        private ProgressState progress = ProgressState.UNSTARTED;
+        private long totalNeeded;
+        private long neededBatches;
+    }
+
     private static final class Accumulator {
         private final TreeCost result;
+        private final Map<MaterialNode, NodeProgress> updates = new IdentityHashMap<>();
+        private final Map<EmiRecipe, Long> recipeAmounts = new HashMap<>();
 
         private Accumulator(TreeCost result) {
             this.result = result;
         }
 
-        private void clear() {
-            result.costs.clear();
-            result.chanceCosts.clear();
-            result.remainders.clear();
-            result.chanceRemainders.clear();
-        }
-
         private void calculate(MaterialNode node, long batches, boolean trackProgress) {
-            calculateCost(node, batches * node.amount, Chance.DEFAULT, trackProgress);
+            calculateCost(node, Math.multiplyExact(batches, node.amount), Chance.DEFAULT, trackProgress);
         }
 
         private void addCost(EmiIngredient ingredient, long amount, long minBatch, Chance chance) {
             if (chance.chanced) {
                 ChanceMaterialCost cost = result.chanceCosts.get(ingredient);
                 if (cost == null) {
-                    cost = new ChanceMaterialCost(ingredient, amount, chance.value);
+                    cost = new ExactChanceMaterialCost(ingredient, amount, chance.value);
                     result.chanceCosts.put(ingredient, cost);
                 } else {
-                    cost.merge(amount, chance.value);
+                    ((ExactChanceMaterialCost) cost).mergeExact(amount, chance.value);
                 }
                 cost.minBatch(minBatch);
             } else {
@@ -115,7 +231,7 @@ public final class ForestCosts {
                 if (cost == null) {
                     result.costs.put(ingredient, new FlatMaterialCost(ingredient, amount));
                 } else {
-                    cost.amount += amount;
+                    cost.amount = Math.addExact(cost.amount, amount);
                 }
             }
         }
@@ -128,64 +244,59 @@ public final class ForestCosts {
             if (chance.chanced) {
                 ChanceMaterialCost remainder = result.chanceRemainders.get(key);
                 if (remainder == null) {
-                    result.chanceRemainders.put(key, new ChanceMaterialCost(key, amount, chance.value));
+                    result.chanceRemainders.put(key, new ExactChanceMaterialCost(key, amount, chance.value));
                 } else {
-                    remainder.merge(amount, chance.value);
+                    ((ExactChanceMaterialCost) remainder).mergeExact(amount, chance.value);
                 }
             } else {
                 FlatMaterialCost remainder = result.remainders.get(key);
                 if (remainder == null) {
                     result.remainders.put(key, new FlatMaterialCost(key, amount));
                 } else {
-                    remainder.amount += amount;
+                    remainder.amount = Math.addExact(remainder.amount, amount);
                 }
             }
         }
 
-        private double takeChancedRemainder(EmiStack stack, double desired, boolean catalyst, Chance chance) {
-            double given = 0;
-            ChanceMaterialCost chanced = result.chanceRemainders.get(stack);
+        private BigDecimal takeChancedRemainder(EmiStack stack, BigDecimal desired,
+                boolean catalyst, Chance chance) {
+            ExactChanceMaterialCost chanced = (ExactChanceMaterialCost) result.chanceRemainders.get(stack);
             if (chanced != null) {
-                double effective = chanced.amount * chanced.chance;
-                if (effective >= desired) {
-                    if (!catalyst) {
-                        chanced.amount = 1;
-                        chanced.chance = (float) (effective - desired);
-                        if (chanced.chance == 0) {
-                            result.chanceRemainders.remove(stack);
-                        }
-                    }
-                    return desired;
-                }
-                given = effective;
+                BigDecimal effective = chanced.expected;
+                BigDecimal given = effective.min(desired);
                 if (!catalyst) {
-                    double leftover = effective - given * chance.value;
-                    if (leftover == 0) {
+                    BigDecimal leftover = effective.compareTo(desired) >= 0
+                            ? effective.subtract(desired)
+                            : effective.subtract(given.multiply(chance.value));
+                    // EMI's partial-consumption formula can produce a negative
+                    // leftover for production factors above one. It is depleted,
+                    // so do not retain an unusable negative remainder.
+                    if (leftover.signum() <= 0) {
                         result.chanceRemainders.remove(stack);
                     } else {
-                        chanced.amount = 1;
-                        chanced.chance = (float) leftover;
+                        chanced.setExpected(leftover);
                     }
                 }
-            } else {
-                FlatMaterialCost flat = result.remainders.get(stack);
-                if (flat != null) {
-                    if (flat.amount >= desired) {
-                        if (!catalyst) {
-                            flat.amount -= desired;
-                            if (flat.amount == 0) {
-                                result.remainders.remove(stack);
-                            }
+                return given;
+            }
+            FlatMaterialCost flat = result.remainders.get(stack);
+            if (flat != null) {
+                BigDecimal effective = BigDecimal.valueOf(flat.amount);
+                BigDecimal given = effective.min(desired);
+                if (!catalyst) {
+                    if (effective.compareTo(desired) >= 0) {
+                        // Match EMI's integer inventory remainder conversion, without double rounding.
+                        flat.amount = effective.subtract(desired).setScale(0, RoundingMode.DOWN).longValueExact();
+                        if (flat.amount == 0) {
+                            result.remainders.remove(stack);
                         }
-                        return desired;
-                    }
-                    if (!catalyst) {
+                    } else {
                         result.remainders.remove(stack);
                     }
-                    given += flat.amount;
                 }
+                return given;
             }
-            return given;
+            return BigDecimal.ZERO;
         }
 
         private long takeRemainder(EmiStack stack, long desired, boolean catalyst) {
@@ -209,9 +320,9 @@ public final class ForestCosts {
         }
 
         private void complete(MaterialNode node) {
-            node.progress = ProgressState.COMPLETED;
-            node.totalNeeded = 0;
-            node.neededBatches = 0;
+            NodeProgress update = new NodeProgress();
+            update.progress = ProgressState.COMPLETED;
+            updates.put(node, update);
             if (node.children != null) {
                 for (MaterialNode child : node.children) {
                     complete(child);
@@ -221,9 +332,7 @@ public final class ForestCosts {
 
         private void calculateCost(MaterialNode node, long amount, Chance chance, boolean trackProgress) {
             if (trackProgress) {
-                node.progress = ProgressState.UNSTARTED;
-                node.totalNeeded = 0;
-                node.neededBatches = 0;
+                updates.put(node, new NodeProgress());
             }
             boolean catalyst = EmiCompatibility.isCatalyst(node);
             if (catalyst) {
@@ -242,13 +351,20 @@ public final class ForestCosts {
             List<EmiStack> ingredientStacks = node.ingredient.getEmiStacks();
             for (EmiStack stack : ingredientStacks) {
                 if (chance.chanced) {
-                    double desired = amount * chance.value;
-                    double given = takeChancedRemainder(stack, desired, catalyst, chance);
-                    if (given > 0) {
-                        double scaled = given / chance.value;
-                        amount -= (long) scaled;
+                    BigDecimal desired = ForestAmounts.checkExpected(BigDecimal.valueOf(amount).multiply(chance.value));
+                    BigDecimal given = takeChancedRemainder(stack, desired, catalyst, chance);
+                    if (given.signum() > 0) {
+                        if (given.compareTo(desired) == 0) {
+                            amount = 0;
+                            continue;
+                        }
+                        BigDecimal scaled = given.divide(chance.value, PRECISION);
+                        long consumed = scaled.setScale(0, RoundingMode.DOWN).longValueExact();
+                        amount = Math.subtractExact(amount, consumed);
                         if (amount > 0) {
-                            chance = new Chance((float) ((amount - scaled % 1) * chance.value / amount), true);
+                            BigDecimal fraction = scaled.subtract(BigDecimal.valueOf(consumed));
+                            chance = new Chance(BigDecimal.valueOf(amount).subtract(fraction).multiply(chance.value)
+                                    .divide(BigDecimal.valueOf(amount), PRECISION), true);
                         }
                     }
                 } else {
@@ -262,7 +378,7 @@ public final class ForestCosts {
                 return;
             }
             if (trackProgress && amount != original) {
-                node.progress = ProgressState.PARTIAL;
+                updates.get(node).progress = ProgressState.PARTIAL;
             }
 
             if (recipe == null) {
@@ -270,44 +386,54 @@ public final class ForestCosts {
                 return;
             }
 
-            long batches = (long) Math.ceil(amount / (double) node.divisor);
-            long effectiveCrafts = batches * node.divisor;
+            long batches = ForestAmounts.ceilDiv(amount, node.divisor);
+            long effectiveCrafts = Math.multiplyExact(batches, node.divisor);
+            // EMI's favorite counter sums totalNeeded per recipe. Since divisor >= 1,
+            // its neededBatches sum cannot exceed this checked quantity sum.
+            recipeAmounts.merge(recipe, amount, Math::addExact);
             if (trackProgress) {
-                node.totalNeeded = amount;
-                node.neededBatches = batches;
+                updates.get(node).totalNeeded = amount;
+                updates.get(node).neededBatches = batches;
             }
             Chance produced = chance.produce(node.produceChance);
             for (MaterialNode child : node.children) {
-                calculateCost(child, batches * child.amount, produced.consume(child.consumeChance), trackProgress);
+                calculateCost(child, Math.multiplyExact(batches, child.amount), produced.consume(child.consumeChance), trackProgress);
             }
 
             EmiStack output = node.ingredient.getEmiStacks().get(0);
             addRemainder(output, effectiveCrafts - amount, produced);
             for (EmiStack otherOutput : recipe.getOutputs()) {
                 if (!output.equals(otherOutput)) {
-                    addRemainder(otherOutput, batches * otherOutput.getAmount(), produced.consume(otherOutput.getChance()));
+                    addRemainder(otherOutput, Math.multiplyExact(batches, otherOutput.getAmount()), produced.consume(otherOutput.getChance()));
                 }
             }
             for (MaterialNode child : node.children) {
                 if (!child.remainder.isEmpty() && child.remainderAmount > 0) {
                     long remainderAmount = EmiCompatibility.isCatalyst(child)
                             ? child.remainderAmount
-                            : batches * child.remainderAmount;
+                            : Math.multiplyExact(batches, child.remainderAmount);
                     addRemainder(child.remainder, remainderAmount, produced.consume(child.consumeChance));
                 }
             }
         }
     }
 
-    private record Chance(float value, boolean chanced) {
-        private static final Chance DEFAULT = new Chance(1, false);
+    private record Chance(BigDecimal value, boolean chanced) {
+        private static final Chance DEFAULT = new Chance(BigDecimal.ONE, false);
 
         private Chance produce(float chance) {
-            return chance == 1 ? this : new Chance(value / chance, true);
+            if (chance == 1) {
+                return this;
+            }
+            BigDecimal divisor = ForestAmounts.decimalChance(chance);
+            if (divisor.signum() == 0) {
+                throw new ArithmeticException("Invalid zero output chance");
+            }
+            return new Chance(value.divide(divisor, PRECISION), true);
         }
 
         private Chance consume(float chance) {
-            return chance == 1 ? this : new Chance(value * chance, true);
+            return chance == 1 ? this : new Chance(value.multiply(ForestAmounts.decimalChance(chance)), true);
         }
     }
 }

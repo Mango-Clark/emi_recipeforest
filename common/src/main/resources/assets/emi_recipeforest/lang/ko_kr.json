@@ -123,5 +123,6 @@
   "tooltip.emi_recipeforest.bookmark.apply": "§6[좌클릭]§r 북마크 적용",
   "tooltip.emi_recipeforest.bookmark.delete": "§6[우클릭]§r 북마크 삭제",
   "tooltip.emi_recipeforest.bookmark.rename": "§6[Shift + 우클릭]§r 북마크 이름 변경",
-  "message.emi_recipeforest.bookmark.invalid": "이 북마크에는 현재 월드에서 사용할 수 있는 제작법이 없습니다"
+  "message.emi_recipeforest.bookmark.invalid": "현재 월드에서 이 북마크를 복원할 수 없습니다",
+  "message.emi_recipeforest.amount_limit": "제작법 숲의 수량이 너무 커서 계산할 수 없습니다. 변경을 적용하지 않았습니다."
 }

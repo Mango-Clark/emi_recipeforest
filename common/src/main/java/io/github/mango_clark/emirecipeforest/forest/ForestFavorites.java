@@ -2,6 +2,7 @@ package io.github.mango_clark.emirecipeforest.forest;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -33,9 +34,17 @@ public final class ForestFavorites {
      * @param inventory current EMI player inventory
      */
     public static void updateSynthetic(EmiPlayerInventory inventory) {
+        try {
+            updateValidSynthetic(inventory);
+        } catch (ArithmeticException exception) {
+            ForestManager.reportAmountLimit();
+        }
+    }
+
+    private static void updateValidSynthetic(EmiPlayerInventory inventory) {
         List<MaterialTree> trees = ForestManager.getTrees();
-        EmiFavorites.syntheticFavorites.clear();
         if (trees.isEmpty() || !ForestManager.isCraftingMode()) {
+            EmiFavorites.syntheticFavorites.clear();
             return;
         }
 
@@ -51,6 +60,8 @@ public final class ForestFavorites {
         Object2LongMap<EmiRecipe> amounts = new Object2LongLinkedOpenHashMap<>();
         countRecipes(trees, batches, amounts);
 
+        List<EmiFavorite.Synthetic> nextFavorites = new ArrayList<>();
+
         boolean hasSomething = false;
         for (Object2LongMap.Entry<EmiRecipe> entry : batches.object2LongEntrySet()) {
             EmiRecipe recipe = entry.getKey();
@@ -62,10 +73,11 @@ public final class ForestFavorites {
             hasSomething = true;
             int state = inventory.canCraft(recipe, batch) ? 2 : inventory.canCraft(recipe) ? 1 : 0;
             long total = originalAmounts.getOrDefault(recipe, amount);
-            EmiFavorites.syntheticFavorites.add(RECIPE_SYNTHETIC_FACTORY.create(recipe, batch, amount, total, state));
+            nextFavorites.add(RECIPE_SYNTHETIC_FACTORY.create(recipe, batch, amount, total, state));
         }
 
         if (!hasSomething) {
+            EmiFavorites.syntheticFavorites.clear();
             ForestManager.setCraftingMode(false);
             return;
         }
@@ -77,7 +89,7 @@ public final class ForestFavorites {
         for (FlatMaterialCost cost : remainingCost.costs.values()) {
             if (cost.amount > 0) {
                 long total = originalCosts.getOrDefault(cost.ingredient, cost).amount;
-                EmiFavorites.syntheticFavorites.add(new EmiFavorite.Synthetic(cost.ingredient, cost.amount, total));
+                nextFavorites.add(new EmiFavorite.Synthetic(cost.ingredient, cost.amount, total));
             }
         }
         for (ChanceMaterialCost cost : remainingCost.chanceCosts.values()) {
@@ -87,14 +99,15 @@ public final class ForestFavorites {
             long needed = cost.getEffectiveAmount();
             if (originalChanceCosts.containsKey(cost.ingredient)) {
                 ChanceMaterialCost originalChance = originalChanceCosts.get(cost.ingredient);
-                long done = (long) Math.ceil(originalChance.amount * originalChance.chance
-                        - cost.amount * cost.chance);
+                long done = ForestCosts.completedAmount(originalChance, cost);
                 needed = originalChance.getEffectiveAmount() - done;
             }
             if (needed > 0) {
-                EmiFavorites.syntheticFavorites.add(new EmiFavorite.Synthetic(cost.ingredient, needed, needed));
+                nextFavorites.add(new EmiFavorite.Synthetic(cost.ingredient, needed, needed));
             }
         }
+        EmiFavorites.syntheticFavorites.clear();
+        EmiFavorites.syntheticFavorites.addAll(nextFavorites);
     }
 
     private static void countRecipes(List<MaterialTree> trees, Object2LongMap<EmiRecipe> batches,

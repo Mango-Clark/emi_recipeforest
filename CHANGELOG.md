@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Forest batch changes and bookmark restoration reject quantities outside the calculation range while preserving the previous forest. Material costs, chance quantities, and recipe rounding retain precision for large counts.
+
 ### Changed
 
 - Detailed Recipe Forest settings now use an indented connector to distinguish their subgroup in EMI Config.

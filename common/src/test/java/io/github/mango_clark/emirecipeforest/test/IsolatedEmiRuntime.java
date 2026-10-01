@@ -115,7 +115,13 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 """),
             Map.entry("net.minecraft.client.Minecraft", """
                 package net.minecraft.client;
-                public final class Minecraft { private static final Minecraft INSTANCE = new Minecraft(); public java.io.File gameDirectory = new java.io.File("."); public static Minecraft getInstance() { return INSTANCE; } }
+                public final class Minecraft { private static final Minecraft INSTANCE = new Minecraft(); public java.io.File gameDirectory = new java.io.File("."); public net.minecraft.client.player.LocalPlayer player; public static Minecraft getInstance() { return INSTANCE; } }
+                """),
+            Map.entry("net.minecraft.client.player.LocalPlayer", """
+                package net.minecraft.client.player; public class LocalPlayer extends net.minecraft.world.entity.player.Player { public void displayClientMessage(net.minecraft.network.chat.Component message, boolean actionBar) {} }
+                """),
+            Map.entry("net.minecraft.world.entity.player.Player", """
+                package net.minecraft.world.entity.player; public class Player {}
                 """),
             Map.entry("com.mojang.blaze3d.platform.InputConstants", """
                 package com.mojang.blaze3d.platform;
@@ -187,7 +193,7 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 """),
             Map.entry("dev.emi.emi.api.recipe.EmiPlayerInventory", """
                 package dev.emi.emi.api.recipe;
-                public final class EmiPlayerInventory { public java.util.Map<dev.emi.emi.api.stack.EmiStack,dev.emi.emi.api.stack.EmiStack> inventory=new java.util.LinkedHashMap<>(); public EmiPlayerInventory(java.util.List<dev.emi.emi.api.stack.EmiStack> stacks){for(var stack:stacks)inventory.put(stack,stack);} }
+                public final class EmiPlayerInventory { public java.util.Map<dev.emi.emi.api.stack.EmiStack,dev.emi.emi.api.stack.EmiStack> inventory=new java.util.LinkedHashMap<>(); public EmiPlayerInventory(java.util.List<dev.emi.emi.api.stack.EmiStack> stacks){for(var stack:stacks)inventory.put(stack,stack);} public static EmiPlayerInventory of(net.minecraft.world.entity.player.Player player){return new EmiPlayerInventory(java.util.List.of());} }
                 """),
             Map.entry("dev.emi.emi.bom.ProgressState", """
                 package dev.emi.emi.bom; public enum ProgressState { UNSTARTED, PARTIAL, COMPLETED }
@@ -196,13 +202,13 @@ final class IsolatedEmiRuntime implements AutoCloseable {
                 package dev.emi.emi.bom; public enum FoldState { DEFAULT, EXPANDED, COLLAPSED }
                 """),
             Map.entry("dev.emi.emi.bom.FlatMaterialCost", """
-                package dev.emi.emi.bom; public class FlatMaterialCost { public dev.emi.emi.api.stack.EmiIngredient ingredient; public long amount; public FlatMaterialCost(dev.emi.emi.api.stack.EmiIngredient ingredient,long amount){this.ingredient=ingredient;this.amount=amount;} }
+                package dev.emi.emi.bom; public class FlatMaterialCost { public dev.emi.emi.api.stack.EmiIngredient ingredient; public long amount; public FlatMaterialCost(dev.emi.emi.api.stack.EmiIngredient ingredient,long amount){this.ingredient=ingredient;this.amount=amount;} public long getEffectiveAmount(){return amount;} }
                 """),
             Map.entry("dev.emi.emi.bom.ChanceMaterialCost", """
-                package dev.emi.emi.bom; public final class ChanceMaterialCost extends FlatMaterialCost { public long minBatch; public float chance; public ChanceMaterialCost(dev.emi.emi.api.stack.EmiIngredient ingredient,long amount,float chance){super(ingredient,amount);this.chance=chance;} public void merge(long amount,float chance){this.amount+=amount;this.chance=chance;} public void minBatch(long value){minBatch=Math.max(minBatch,value);} }
+                package dev.emi.emi.bom; public class ChanceMaterialCost extends FlatMaterialCost { public long minBatch=1; public float chance; public ChanceMaterialCost(dev.emi.emi.api.stack.EmiIngredient ingredient,long amount,float chance){super(ingredient,amount);this.chance=chance;} public void merge(long amount,float chance){long sum=this.amount+amount;this.chance=(this.chance*this.amount+chance*amount)/sum;this.amount+=amount;} public void minBatch(long value){minBatch=Math.max(minBatch,value);} public long getEffectiveAmount(){return Math.max(minBatch,Math.round(amount*chance));} }
                 """),
             Map.entry("dev.emi.emi.bom.TreeCost", """
-                package dev.emi.emi.bom; public final class TreeCost { public java.util.Map<dev.emi.emi.api.stack.EmiIngredient,FlatMaterialCost> costs=new java.util.LinkedHashMap<>(); public java.util.Map<dev.emi.emi.api.stack.EmiIngredient,ChanceMaterialCost> chanceCosts=new java.util.LinkedHashMap<>(); public java.util.Map<dev.emi.emi.api.stack.EmiStack,FlatMaterialCost> remainders=new java.util.LinkedHashMap<>(); public java.util.Map<dev.emi.emi.api.stack.EmiStack,ChanceMaterialCost> chanceRemainders=new java.util.LinkedHashMap<>(); }
+                package dev.emi.emi.bom; public final class TreeCost { public java.util.Map<dev.emi.emi.api.stack.EmiIngredient,FlatMaterialCost> costs=new java.util.LinkedHashMap<>(); public java.util.Map<dev.emi.emi.api.stack.EmiIngredient,ChanceMaterialCost> chanceCosts=new java.util.LinkedHashMap<>(); public java.util.Map<dev.emi.emi.api.stack.EmiStack,FlatMaterialCost> remainders=new java.util.LinkedHashMap<>(); public java.util.Map<dev.emi.emi.api.stack.EmiStack,ChanceMaterialCost> chanceRemainders=new java.util.LinkedHashMap<>(); public long gcd(long a,long b){return b==0?a:gcd(b,a%b);} }
                 """),
             Map.entry("dev.emi.emi.bom.MaterialNode", """
                 package dev.emi.emi.bom;

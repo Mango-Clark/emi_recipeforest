@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.function.ToLongFunction;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -871,6 +872,71 @@ class ForestBehaviorTest {
         assertBinding(reset.get(0), "KEYSYM", "key.keyboard.f", 70, 0);
     }
 
+    @Test
+    void batchChangesAreAtomicAcrossRootsAndSharedCosts() throws Exception {
+        Object recipe = runtime.recipe("test:batch-safe", runtime.stack("product", 1),
+                List.of(runtime.stack("shared", 1)));
+        Object first = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe);
+        Object second = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), recipe);
+        call(manager, "setCraftingMode", types(boolean.class), true);
+        call(manager, "beginPendingResolution", types("dev.emi.emi.api.stack.EmiIngredient",
+                "io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$ResolutionScope"),
+                runtime.stack("shared", 1), enumConstant(runtime.type(
+                        "io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$ResolutionScope"), "ALL_ROOTS"));
+        ToLongFunction<Object> tooLarge = tree -> tree == first ? Long.MAX_VALUE : 2;
+        assertFalse((boolean) call(manager, "tryChangeBatches", types(List.class, ToLongFunction.class),
+                List.of(first, second), tooLarge));
+        assertEquals(1L, field(first, "batches"));
+        assertEquals(1L, field(second, "batches"));
+        assertSame(second, call(manager, "getSelectedTree", types()));
+        assertTrue((boolean) call(manager, "isCraftingMode", types()));
+        assertTrue((boolean) call(manager, "hasPendingResolution", types()));
+        ToLongFunction<Object> maximum = tree -> tree == first ? Long.MAX_VALUE - 1 : 1;
+        assertTrue((boolean) call(manager, "tryChangeBatches", types(List.class, ToLongFunction.class),
+                List.of(first, second), maximum));
+        assertEquals(Long.MAX_VALUE - 1, field(first, "batches"));
+        ToLongFunction<Object> increment = tree -> Math.addExact(Long.MAX_VALUE, 1);
+        assertFalse((boolean) call(manager, "tryChangeBatches", types(List.class, ToLongFunction.class),
+                List.of(first, second), increment));
+        assertEquals(Long.MAX_VALUE - 1, field(first, "batches"));
+        assertEquals(1L, field(second, "batches"));
+    }
+
+    @Test
+    void overflowingBookmarkKeepsStoredQuantityAndLiveForest() throws Exception {
+        Object liveRecipe = runtime.recipe("test:live", runtime.stack("live", 1), List.of());
+        Object live = call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"), liveRecipe);
+        Object savedRecipe = runtime.recipe("test:huge", runtime.stack("huge", 2), List.of());
+        registerRecipe(savedRecipe);
+        Object root = jsonObject();
+        addProperty(root, "recipe", "test:huge");
+        addProperty(root, "batches", Long.MAX_VALUE);
+        jsonAdd(root, "resolutions", jsonArray());
+        jsonAdd(root, "folds", jsonObject());
+        Object roots = jsonArray();
+        jsonArrayAdd(roots, root);
+        Object json = jsonObject();
+        addProperty(json, "name", "Huge forest");
+        addProperty(json, "selected", 0);
+        addProperty(json, "crafting", true);
+        jsonAdd(json, "roots", roots);
+        Class<?> bookmark = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$TreeBookmark");
+        Method fromJson = bookmark.getDeclaredMethod("fromJson", runtime.type("com.google.gson.JsonObject"));
+        fromJson.setAccessible(true);
+        Object saved = fromJson.invoke(null, json);
+        assertFalse((boolean) call(bookmark, saved, "apply", types()));
+        assertSame(live, call(manager, "getSelectedTree", types()));
+        assertEquals(1, call(manager, "size", types()));
+        assertFalse((boolean) call(manager, "isCraftingMode", types()));
+        Method toJson = bookmark.getDeclaredMethod("toJson");
+        toJson.setAccessible(true);
+        Object serialized = toJson.invoke(saved);
+        Object serializedRoots = invoke(serialized, "getAsJsonArray", types(String.class), "roots");
+        Object serializedRoot = invoke(serializedRoots, "get", types(int.class), 0);
+        assertEquals(Long.MAX_VALUE, invoke(invoke(serializedRoot, "get", types(String.class), "batches"),
+                "getAsLong", types()));
+    }
+
     private static Object newTree(Object recipe) throws Exception {
         return runtime.type("dev.emi.emi.bom.MaterialTree")
                 .getConstructor(runtime.type("dev.emi.emi.api.recipe.EmiRecipe")).newInstance(recipe);
@@ -914,15 +980,26 @@ class ForestBehaviorTest {
     }
 
     private static Object field(Object target, String name) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
+        Field field = findField(target.getClass(), name);
         field.setAccessible(true);
         return field.get(target);
     }
 
     private static void field(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
+        Field field = findField(target.getClass(), name);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
+        for (Class<?> owner = type; owner != null; owner = owner.getSuperclass()) {
+            try {
+                return owner.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                // Native EMI costs now have a narrow precision subclass.
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     private static void addProperty(Object json, String name, Object value) throws Exception {

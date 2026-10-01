@@ -867,7 +867,7 @@ public final class ForestBookmarks {
          * @return whether at least one root was restored
          */
         public boolean apply() {
-            List<PreparedRoot> prepared = new ArrayList<>();
+            List<MaterialTree> prepared = new ArrayList<>();
             try {
                 for (RootSnapshot snapshot : roots) {
                     try {
@@ -879,7 +879,7 @@ public final class ForestBookmarks {
                         tree.batches = Math.max(1, snapshot.batches);
                         snapshot.restoreResolutions(tree);
                         snapshot.restoreFolds(tree.goal);
-                        prepared.add(new PreparedRoot(recipe, tree));
+                        prepared.add(tree);
                     } catch (RuntimeException exception) {
                         Constants.LOG.warn("Skipping invalid root '{}' in RecipeForest bookmark '{}'",
                             snapshot.recipeId, name, exception);
@@ -894,29 +894,7 @@ public final class ForestBookmarks {
             }
 
             // No live state is touched until every recoverable root has been fully prepared.
-            ForestManager.clear();
-            for (PreparedRoot preparedRoot : prepared) {
-                MaterialTree tree = ForestManager.add(preparedRoot.recipe);
-                tree.batches = preparedRoot.tree.batches;
-                tree.resolutions.clear();
-                tree.resolutions.putAll(preparedRoot.tree.resolutions);
-                tree.recalculate();
-                copyFoldStates(preparedRoot.tree.goal, tree.goal);
-            }
-            ForestManager.select(Math.min(Math.max(0, selectedIndex), ForestManager.size() - 1));
-            ForestManager.setCraftingMode(craftingMode);
-            return true;
-        }
-
-        private static void copyFoldStates(MaterialNode source, MaterialNode target) {
-            target.state = source.state;
-            if (source.children == null || target.children == null) {
-                return;
-            }
-            int children = Math.min(source.children.size(), target.children.size());
-            for (int i = 0; i < children; i++) {
-                copyFoldStates(source.children.get(i), target.children.get(i));
-            }
+            return ForestManager.replaceTrees(prepared, selectedIndex, craftingMode);
         }
 
         private static TreeBookmark capture(String name) {
@@ -1199,10 +1177,4 @@ public final class ForestBookmarks {
         }
     }
 
-    private record PreparedRoot(EmiRecipe recipe, MaterialTree tree) {
-        private PreparedRoot {
-            Objects.requireNonNull(recipe);
-            Objects.requireNonNull(tree);
-        }
-    }
 }

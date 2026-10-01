@@ -62,6 +62,7 @@ import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks;
 import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.ResolutionScope;
 import io.github.mango_clark.emirecipeforest.compat.EmiCompatibility;
 import io.github.mango_clark.emirecipeforest.forest.ForestCosts;
+import io.github.mango_clark.emirecipeforest.forest.ForestAmounts;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay.DisplayMode;
@@ -149,6 +150,14 @@ public class ForestScreen extends BoMScreen {
 	}
 
 	public void recalculateTree() {
+		try {
+			recalculateValidTree();
+		} catch (ArithmeticException exception) {
+			ForestManager.reportAmountLimit();
+		}
+	}
+
+	private void recalculateValidTree() {
 		MaterialTree selectedTree = ForestManager.getSelectedTree();
 		boolean forestEmpty = ForestManager.isEmpty();
 		help = new Bounds(Math.max(2, rootPanelLeft() - 18), height - 18, 16, 16);
@@ -169,6 +178,8 @@ public class ForestScreen extends BoMScreen {
 		clampRootListScroll();
 		if (selectedTree != null) {
 			TreeVolume volume = forest$addNewNodes(selectedTree.goal, selectedTree.batches, 1, 0, ChanceState.DEFAULT);
+			EmiPlayerInventory nextInventory = minecraft.player == null ? null : EmiPlayerInventory.of(minecraft.player);
+			ForestCosts forestCosts = ForestCosts.calculateNew(ForestManager.getTrees(), nextInventory);
 			nodes = volume.nodes;
 			int horizontalOffset = (volume.getMaxRight() + volume.getMinLeft()) / 2;
 			for (Node node : volume.nodes) {
@@ -182,8 +193,7 @@ public class ForestScreen extends BoMScreen {
 
 			nodeWidth = volume.getMaxRight() - volume.getMinLeft();
 			nodeHeight = getNodeHeight(selectedTree.goal);
-			playerInv = minecraft.player == null ? null : EmiPlayerInventory.of(minecraft.player);
-			ForestCosts forestCosts = ForestCosts.calculateNew(ForestManager.getTrees(), playerInv);
+			playerInv = nextInventory;
 			TreeCost progressTreeCost = forestCosts.getProgress();
 			TreeCost totalTreeCost = forestCosts.getTotal();
 			Map<EmiIngredient, FlatMaterialCost> progressCosts = progressTreeCost.costs.values().stream()
@@ -210,7 +220,7 @@ public class ForestScreen extends BoMScreen {
 							cost.alreadyDone = node.getEffectiveAmount();
 						} else {
 							ChanceMaterialCost progress = chanceProgressCosts.get(node.ingredient);
-							cost.alreadyDone = (long) Math.ceil(cmc.amount * cmc.chance - progress.amount * progress.chance);
+							cost.alreadyDone = ForestCosts.completedAmount(cmc, progress);
 						}
 					} else {
 						if (!progressCosts.containsKey(node.ingredient)) {
@@ -792,7 +802,7 @@ public class ForestScreen extends BoMScreen {
 		if (EmiCompatibility.isCatalyst(node)) {
 			multiplier = node.amount;
 		} else {
-			multiplier = node.amount * (int) Math.ceil(multiplier / (float) divisor);
+			multiplier = Math.multiplyExact(node.amount, ForestAmounts.ceilDiv(multiplier, divisor));
 		}
 		if (node.recipe != null && node.children.size() > 0 && node.state == FoldState.EXPANDED) {
 			ChanceState produced = chance.produce(node.produceChance);
@@ -1012,15 +1022,7 @@ public class ForestScreen extends BoMScreen {
 			ForestManager.toggleCraftingMode();
 			recalculateTree();
 		} else if (batches.contains(mx, my) && ForestManager.getSelectedTree() != null) {
-			boolean changed = false;
-			for (MaterialTree tree : batchTargets()) {
-				long ideal = tree.cost.getIdealBatch(tree.goal, 1, 1);
-				if (ideal != tree.batches) {
-					tree.batches = ideal;
-					changed = true;
-				}
-			}
-			if (changed) {
+			if (ForestManager.tryChangeBatches(batchTargets(), tree -> ForestAmounts.idealBatch(tree.goal, tree.cost))) {
 				Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
 				recalculateTree();
 			}
@@ -1127,10 +1129,9 @@ public class ForestScreen extends BoMScreen {
 	private void applyMinimalLeftoverBatch(int index) {
 		List<MaterialTree> targets = EmiInput.isAltDown()
 			? ForestManager.getTrees() : List.of(ForestManager.getTrees().get(index));
-		for (MaterialTree tree : targets) {
-			tree.batches = Math.max(1, tree.cost.getIdealBatch(tree.goal, 1, 1));
+		if (ForestManager.tryChangeBatches(targets, tree -> ForestAmounts.idealBatch(tree.goal, tree.cost))) {
+			ForestManager.select(index);
 		}
-		ForestManager.select(index);
 	}
 
 	private void moveRootListEntry(int index, int direction) {
@@ -1155,9 +1156,7 @@ public class ForestScreen extends BoMScreen {
 		}
 		List<MaterialTree> targets = EmiInput.isAltDown()
 			? ForestManager.getTrees() : List.of(ForestManager.getTrees().get(index));
-		for (MaterialTree tree : targets) {
-			adjustBatch(tree, amount);
-		}
+		adjustBatches(targets, amount);
 	}
 
 	private List<MaterialTree> batchTargets() {
@@ -1194,9 +1193,7 @@ public class ForestScreen extends BoMScreen {
 		int mx = (int) ((mouseX - contentCenterX()) / scale - offX);
 		int my = (int) ((mouseY - contentCenterY()) / scale - offY);
 		if (ForestManager.getSelectedTree() != null && batches.contains(mx, my)) {
-			for (MaterialTree tree : batchTargets()) {
-				adjustBatch(tree, (long) amount);
-			}
+			adjustBatches(batchTargets(), (long) amount);
 			recalculateTree();
 			return true;
 		}
@@ -1252,19 +1249,9 @@ public class ForestScreen extends BoMScreen {
 		rootBatchScrollIndex = -1;
 	}
 
-	private void adjustBatch(MaterialTree tree, long amount) {
-		long adjustment = amount;
-		if (EmiInput.isShiftDown()) {
-			adjustment *= 16;
-		} else if (EmiInput.isControlDown()) {
-			adjustment = amount > 0 ? tree.batches : -tree.batches / 2;
-		}
-		if (tree.batches == 1 && adjustment > 1) {
-			tree.batches = adjustment;
-		} else {
-			tree.batches += adjustment;
-		}
-		tree.batches = Math.max(1, tree.batches);
+	private void adjustBatches(List<MaterialTree> targets, long amount) {
+		ForestManager.tryChangeBatches(targets, tree -> ForestAmounts.adjustBatch(tree.batches, amount,
+			EmiInput.isShiftDown(), EmiInput.isControlDown()));
 	}
 
 	@Override
@@ -1685,7 +1672,7 @@ public class ForestScreen extends BoMScreen {
 
 		private long getDisplayAmount() {
 			if (chance.chanced()) {
-				return Math.max(Math.round(amount * chance.chance()), node.amount);
+				return Math.max(ForestAmounts.roundExpected(amount, chance.chance()), node.amount);
 			}
 			return amount;
 		}
@@ -1721,7 +1708,7 @@ public class ForestScreen extends BoMScreen {
 
 		private Component getAmountText(boolean decomposed) {
 			if (chance.chanced()) {
-				long a = Math.round(amount * chance.chance());
+				long a = ForestAmounts.roundExpected(amount, chance.chance());
 				a = Math.max(a, node.amount);
 				return EmiPort.append(EmiPort.literal("≈"),
 						amountText(node.ingredient, a, decomposed))

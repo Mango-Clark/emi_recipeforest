@@ -32,6 +32,16 @@ tasks.named('test', Test).configure {
 }
 
 def emiCompatibilityContracts = [
+        'dev.emi.emi.bom.TreeCost': [
+                [token: ' gcd(', descriptor: '(JJ)J', access: 'public']
+        ],
+        'dev.emi.emi.bom.ChanceMaterialCost': [
+                [token: 'ChanceMaterialCost(', descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;JF)V', access: 'public'],
+                [token: ' minBatch;', descriptor: 'J', access: 'public'],
+                [token: ' chance;', descriptor: 'F', access: 'public'],
+                [token: ' getEffectiveAmount(', descriptor: '()J', access: 'public'],
+                [token: ' merge(', descriptor: '(JF)V', access: 'public']
+        ],
         'dev.emi.emi.bom.BoM': [
                 [token: ' tree;', descriptor: 'Ldev/emi/emi/bom/MaterialTree;', access: 'public static'],
                 [token: ' craftingMode;', descriptor: 'Z', access: 'public static'],
@@ -296,11 +306,11 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                         token: ' catalyst;', descriptor: 'Z', access: 'public'
                 ]]
             } else {
-                contracts['dev.emi.emi.bom.TreeCost'] = [[
+                contracts['dev.emi.emi.bom.TreeCost'] << [
                         token: ' isCatalyst(',
                         descriptor: '(Ldev/emi/emi/api/stack/EmiIngredient;)Z',
                         access: 'public static'
-                ]]
+                ]
             }
 
             contracts.each { owner, members ->
@@ -316,6 +326,7 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                 }
                 def lines = output.toString('UTF-8').readLines()
                 if (owner in ['dev.emi.emi.input.EmiBind',
+                        'dev.emi.emi.bom.ChanceMaterialCost',
                         'dev.emi.emi.screen.widget.config.EmiBindWidget']) {
                     def declaration = lines.find { it.startsWith('public ') && it.contains(" ${owner} ") }
                     if (declaration == null || declaration.contains(' final class ')
@@ -335,6 +346,11 @@ tasks.register('verifyEmiCompatibilityMatrix') {
                     def found = (0..<lines.size()).any { index ->
                         def signature = lines[index].trim()
                         if (!signature.startsWith(member.access) || !signature.contains(member.token)) {
+                            return false
+                        }
+                        if (owner == 'dev.emi.emi.bom.ChanceMaterialCost'
+                                && member.token in [' getEffectiveAmount(', ' merge(']
+                                && signature.contains(' final ')) {
                             return false
                         }
                         def descriptorLine = ((index + 1)..<lines.size()).find { !lines[it].trim().isEmpty() }
