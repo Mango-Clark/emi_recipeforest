@@ -37,7 +37,6 @@ import dev.emi.emi.api.stack.EmiIngredient;
 import dev.emi.emi.api.stack.EmiStack;
 import dev.emi.emi.api.widget.Bounds;
 import dev.emi.emi.bom.ChanceMaterialCost;
-import dev.emi.emi.bom.ChanceState;
 import dev.emi.emi.bom.FlatMaterialCost;
 import dev.emi.emi.bom.FoldState;
 import dev.emi.emi.bom.MaterialNode;
@@ -63,6 +62,7 @@ import io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks.Resolution
 import io.github.mango_clark.emirecipeforest.compat.EmiCompatibility;
 import io.github.mango_clark.emirecipeforest.forest.ForestCosts;
 import io.github.mango_clark.emirecipeforest.forest.ForestAmounts;
+import io.github.mango_clark.emirecipeforest.forest.ForestAmounts.Chance;
 import io.github.mango_clark.emirecipeforest.forest.ForestManager;
 import io.github.mango_clark.emirecipeforest.forest.ForestRecipeSelection;
 import io.github.mango_clark.emirecipeforest.forest.QuantityDisplay;
@@ -177,7 +177,7 @@ public class ForestScreen extends BoMScreen {
 		}
 		clampRootListScroll();
 		if (selectedTree != null) {
-			TreeVolume volume = forest$addNewNodes(selectedTree.goal, selectedTree.batches, 1, 0, ChanceState.DEFAULT);
+			TreeVolume volume = forest$addNewNodes(selectedTree.goal, selectedTree.batches, 1, 0, Chance.DEFAULT);
 			EmiPlayerInventory nextInventory = minecraft.player == null ? null : EmiPlayerInventory.of(minecraft.player);
 			ForestCosts forestCosts = ForestCosts.calculateNew(ForestManager.getTrees(), nextInventory);
 			nodes = volume.nodes;
@@ -818,14 +818,14 @@ public class ForestScreen extends BoMScreen {
 		return 1;
 	}
 
-	private TreeVolume forest$addNewNodes(MaterialNode node, long multiplier, long divisor, int depth, ChanceState chance) {
+	private TreeVolume forest$addNewNodes(MaterialNode node, long multiplier, long divisor, int depth, Chance chance) {
 		if (EmiCompatibility.isCatalyst(node)) {
 			multiplier = node.amount;
 		} else {
 			multiplier = Math.multiplyExact(node.amount, ForestAmounts.ceilDiv(multiplier, divisor));
 		}
 		if (node.recipe != null && node.children.size() > 0 && node.state == FoldState.EXPANDED) {
-			ChanceState produced = chance.produce(node.produceChance);
+			Chance produced = chance.produce(node.produceChance);
 			if (node.recipe instanceof EmiResolutionRecipe) {
 				TreeVolume volume = forest$addNewNodes(node.children.get(0), multiplier, node.divisor, depth, produced);
 				volume.nodes.get(0).resolution = node;
@@ -833,7 +833,7 @@ public class ForestScreen extends BoMScreen {
 			}
 			TreeVolume left = null;
 			for (int i = 0; i < node.children.size(); i++) {
-				ChanceState consumed = produced.consume(node.children.get(i).consumeChance);
+				Chance consumed = produced.consume(node.children.get(i).consumeChance);
 				TreeVolume volume = forest$addNewNodes(node.children.get(i), multiplier, node.divisor, depth + 1, consumed);
 				if (left == null) {
 					left = volume;
@@ -1591,9 +1591,9 @@ public class ForestScreen extends BoMScreen {
 		public MaterialNode node;
 		public int width, x, y, midOffset;
 		public long amount;
-		public ChanceState chance;
+		public Chance chance;
 
-		public Node(MaterialNode node, long amount, int x, int y, ChanceState chance) {
+		public Node(MaterialNode node, long amount, int x, int y, Chance chance) {
 			this.node = node;
 			if (node.recipe != null) {
 				width = 42;
@@ -1692,7 +1692,7 @@ public class ForestScreen extends BoMScreen {
 
 		private long getDisplayAmount() {
 			if (chance.chanced()) {
-				return Math.max(ForestAmounts.roundExpected(amount, chance.chance()), node.amount);
+				return Math.max(ForestAmounts.roundExpected(amount, chance), node.amount);
 			}
 			return amount;
 		}
@@ -1728,13 +1728,11 @@ public class ForestScreen extends BoMScreen {
 
 		private Component getAmountText(boolean decomposed) {
 			if (chance.chanced()) {
-				long a = ForestAmounts.roundExpected(amount, chance.chance());
-				a = Math.max(a, node.amount);
 				return EmiPort.append(EmiPort.literal("≈"),
-						amountText(node.ingredient, a, decomposed))
+						amountText(node.ingredient, getDisplayAmount(), decomposed))
 					.withStyle(ChatFormatting.GOLD);
 			} else {
-				return amountText(node.ingredient, amount, decomposed);
+				return amountText(node.ingredient, getDisplayAmount(), decomposed);
 			}
 		}
 
@@ -1769,14 +1767,14 @@ public class ForestScreen extends BoMScreen {
 		public List<Width> widths = Lists.newArrayList();
 		public List<Node> nodes = Lists.newArrayList();
 
-		public TreeVolume(MaterialNode node, long amount, int y, ChanceState chance) {
+		public TreeVolume(MaterialNode node, long amount, int y, Chance chance) {
 			Node head = new Node(node, amount, 0, y, chance);
 			int l = head.width / 2;
 			widths.add(new Width(-l, head.width - l));
 			nodes.add(head);
 		}
 
-		public void addHead(MaterialNode node, long amount, int y, ChanceState chance) {
+		public void addHead(MaterialNode node, long amount, int y, Chance chance) {
 			int x = (getLeft(0) + getRight(0)) / 2;
 			Node newNode = new Node(node, amount, x, y, chance);
 			for (Node n : nodes) {

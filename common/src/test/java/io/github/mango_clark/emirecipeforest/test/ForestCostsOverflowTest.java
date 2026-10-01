@@ -3,6 +3,7 @@ package io.github.mango_clark.emirecipeforest.test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -179,6 +180,40 @@ class ForestCostsOverflowTest {
     }
 
     @Test
+    void productionChanceNearMaximumHasMatchingCostAndDisplayAmount() throws Exception {
+        Object tree = treeWithOutput("display-boundary", chanceStack("display-output", 1, 0.3F),
+                runtime.stack("display-input", 1));
+        long batches = 2767011721007595519L;
+        long expected = 9223372036854775805L;
+        set(tree, "batches", batches);
+        Object total = result(calculate(List.of(tree), null), "getTotal");
+        assertEquals(expected, effective(first(total, "chanceCosts")));
+        assertEquals(expected, displayExpected(batches, chance(0.3F, 1F)));
+    }
+
+    @Test
+    void cancelledChancesRetainChanceDisplayAndMaximumQuantity() throws Exception {
+        for (float probability : new float[]{0.1F, 0.2F}) {
+            Object chance = chance(probability, probability);
+            assertTrue((boolean) call(chance.getClass(), chance, "chanced", new Class<?>[0]));
+            assertEquals(Long.MAX_VALUE, displayExpected(Long.MAX_VALUE, chance));
+            assertEquals(5L, displayExpected(5, chance));
+        }
+    }
+
+    @Test
+    void exactChanceDisplayRetainsNearestRoundingAndRejectsRealOverflow() throws Exception {
+        assertEquals(1L, displayExpected(1, chance(1F, 0.5F)));
+        assertEquals(2L, displayExpected(3, chance(1F, 0.5F)));
+        assertEquals(0L, displayExpected(Long.MAX_VALUE, chance(1F, 0F)));
+        assertThrows(ArithmeticException.class, () -> displayExpected(Long.MAX_VALUE, chance(0.3F, 1F)));
+        assertThrows(ArithmeticException.class, () -> chance(0F, 1F));
+        assertThrows(ArithmeticException.class, () -> chance(Float.NaN, 1F));
+        assertThrows(ArithmeticException.class, () -> chance(1F, Float.POSITIVE_INFINITY));
+        assertThrows(ArithmeticException.class, () -> chance(1F, -0.1F));
+    }
+
+    @Test
     void returnedMaterialProductAndSumRejectOverflow() throws Exception {
         Object product = tree("returned-product", 1, runtime.stack("input", 1));
         remainder(product, "bucket", Long.MAX_VALUE);
@@ -331,6 +366,17 @@ class ForestCostsOverflowTest {
 
     private static long ceil(long amount, long divisor) throws Exception {
         return (long) call(amounts, null, "ceilDiv", new Class<?>[]{long.class, long.class}, amount, divisor);
+    }
+
+    private static Object chance(float output, float input) throws Exception {
+        Class<?> chanceType = runtime.type("io.github.mango_clark.emirecipeforest.forest.ForestAmounts$Chance");
+        Object chance = chanceType.getField("DEFAULT").get(null);
+        chance = call(chanceType, chance, "produce", new Class<?>[]{float.class}, output);
+        return call(chanceType, chance, "consume", new Class<?>[]{float.class}, input);
+    }
+
+    private static long displayExpected(long amount, Object chance) throws Exception {
+        return (long) call(amounts, null, "roundExpected", new Class<?>[]{long.class, chance.getClass()}, amount, chance);
     }
 
     private static Object tree(String key, long output, Object... inputs) throws Exception {
