@@ -40,7 +40,8 @@ import net.minecraft.world.item.Items;
 
 /** Addon-owned search and forest bookmarks, independent of EMI's emi.json. */
 public final class ForestBookmarks {
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
+    private static final int PREVIOUS_SCHEMA_VERSION = 2;
     private static final int LEGACY_SCHEMA_VERSION = 1;
     /** Default maximum number of visible rows in the Forest list. */
     public static final int DEFAULT_LIST_LENGTH = 64;
@@ -53,8 +54,7 @@ public final class ForestBookmarks {
     /** GLFW key code for F, retained for migration and source compatibility. */
     public static final int DEFAULT_FOREST_KEY_CODE = 70;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final List<SearchBookmark> SEARCHES = new ArrayList<>();
-    private static final List<TreeBookmark> TREES = new ArrayList<>();
+    private static final List<EmiIngredient> CARDS = new ArrayList<>();
     private static int rootGridColumns = 8;
     private static int rootGridRows = 2;
     private static int listLength = DEFAULT_LIST_LENGTH;
@@ -127,24 +127,21 @@ public final class ForestBookmarks {
      * @return immutable combined search and tree bookmark cards
      */
     public static List<EmiIngredient> cards() {
-        List<EmiIngredient> cards = new ArrayList<>(SEARCHES.size() + TREES.size());
-        cards.addAll(SEARCHES);
-        cards.addAll(TREES);
-        return List.copyOf(cards);
+        return List.copyOf(CARDS);
     }
 
     /** Returns persisted search cards.
      * @return immutable search bookmark list
      */
     public static List<SearchBookmark> searches() {
-        return List.copyOf(SEARCHES);
+        return CARDS.stream().filter(SearchBookmark.class::isInstance).map(SearchBookmark.class::cast).toList();
     }
 
     /** Returns persisted tree cards.
      * @return immutable tree bookmark list
      */
     public static List<TreeBookmark> trees() {
-        return List.copyOf(TREES);
+        return CARDS.stream().filter(TreeBookmark.class::isInstance).map(TreeBookmark.class::cast).toList();
     }
 
     /** Returns the root-grid width.
@@ -374,13 +371,13 @@ public final class ForestBookmarks {
         if (normalized.isEmpty()) {
             return null;
         }
-        for (SearchBookmark bookmark : SEARCHES) {
+        for (SearchBookmark bookmark : searches()) {
             if (bookmark.query.equals(normalized)) {
                 return bookmark;
             }
         }
         SearchBookmark bookmark = new SearchBookmark(normalized);
-        SEARCHES.add(bookmark);
+        CARDS.add(bookmark);
         save();
         return bookmark;
     }
@@ -396,7 +393,7 @@ public final class ForestBookmarks {
         if (bookmark.roots.isEmpty()) {
             return null;
         }
-        TREES.add(bookmark);
+        CARDS.add(bookmark);
         save();
         return bookmark;
     }
@@ -417,11 +414,43 @@ public final class ForestBookmarks {
      * @return whether a card was removed
      */
     public static boolean remove(EmiIngredient card) {
-        boolean removed = SEARCHES.remove(card) | TREES.remove(card);
-        if (removed) {
-            save();
+        int index = indexOfCard(card);
+        if (index < 0) {
+            return false;
         }
-        return removed;
+        CARDS.remove(index);
+        save();
+        return true;
+    }
+
+    /**
+     * Moves an owned card to an insertion edge using EMI Favorites' offset semantics.
+     *
+     * @param card bookmark card being moved
+     * @param offset insertion edge before removing the original card
+     * @return whether the card was owned and moved
+     */
+    public static boolean move(EmiIngredient card, int offset) {
+        int original = indexOfCard(card);
+        if (original < 0) {
+            return false;
+        }
+        if (original < offset) {
+            offset--;
+        }
+        CARDS.remove(original);
+        CARDS.add(clamp(offset, 0, CARDS.size()), card);
+        save();
+        return true;
+    }
+
+    private static int indexOfCard(EmiIngredient card) {
+        for (int i = 0; i < CARDS.size(); i++) {
+            if (CARDS.get(i) == card) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -432,7 +461,7 @@ public final class ForestBookmarks {
      * @return whether the bookmark is still owned
      */
     public static boolean rename(TreeBookmark bookmark, String name) {
-        if (!TREES.contains(bookmark)) {
+        if (!CARDS.contains(bookmark)) {
             return false;
         }
         bookmark.name = normalizeName(name);
@@ -456,8 +485,7 @@ public final class ForestBookmarks {
 
     /** Loads addon configuration and bookmark cards, resetting to defaults on missing data. */
     public static void load() {
-        SEARCHES.clear();
-        TREES.clear();
+        CARDS.clear();
         rootGridColumns = 8;
         rootGridRows = 2;
         listLength = DEFAULT_LIST_LENGTH;
@@ -474,8 +502,9 @@ public final class ForestBookmarks {
         try {
             JsonObject root = GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8), JsonObject.class);
             int schema = root == null ? -1 : intValue(root, "schema", -1);
-            boolean migrateLegacyBindings = false;
-            if (root == null || (schema != LEGACY_SCHEMA_VERSION && schema != SCHEMA_VERSION)) {
+            boolean preserveMalformedLegacyBindings = false;
+            if (root == null || (schema != LEGACY_SCHEMA_VERSION && schema != PREVIOUS_SCHEMA_VERSION
+                    && schema != SCHEMA_VERSION)) {
                 Constants.LOG.warn("Ignoring unsupported RecipeForest bookmark schema in {}", path);
                 return;
             }
@@ -491,37 +520,18 @@ public final class ForestBookmarks {
                 rootLayout = enumValue(settings, "rootLayout", RootLayout.class, RootLayout.LIST);
                 quantityMode = enumValue(settings, "quantityMode", QuantityMode.class, QuantityMode.ICON);
                 forestBindings = readForestBindings(settings);
-                migrateLegacyBindings = schema == LEGACY_SCHEMA_VERSION && !settings.has("forestBindings")
-                        && validLegacyKeyCode(settings);
+                preserveMalformedLegacyBindings = schema == LEGACY_SCHEMA_VERSION
+                        && !settings.has("forestBindings") && settings.has("forestKeyCode")
+                        && !validLegacyKeyCode(settings);
                 boxEnabled = booleanValue(settings, "boxEnabled", true);
                 stacksPerBox = clamp(intValue(settings, "stacksPerBox", 27), 1, 256);
             }
-            JsonArray searches = array(root, "searches");
-            for (JsonElement element : searches) {
-                try {
-                    if (element.isJsonPrimitive()) {
-                        String query = normalize(element.getAsString());
-                        if (!query.isEmpty() && SEARCHES.stream().noneMatch(bookmark -> bookmark.query.equals(query))) {
-                            SEARCHES.add(new SearchBookmark(query));
-                        }
-                    }
-                } catch (RuntimeException exception) {
-                    Constants.LOG.warn("Skipping malformed RecipeForest search bookmark", exception);
-                }
+            if (schema == SCHEMA_VERSION) {
+                loadOrderedBookmarks(array(root, "bookmarks"));
+            } else {
+                loadLegacyBookmarks(root);
             }
-            for (JsonElement element : array(root, "trees")) {
-                try {
-                    if (element.isJsonObject()) {
-                        TreeBookmark bookmark = TreeBookmark.fromJson(element.getAsJsonObject());
-                        if (bookmark != null && !bookmark.roots.isEmpty()) {
-                            TREES.add(bookmark);
-                        }
-                    }
-                } catch (RuntimeException exception) {
-                    Constants.LOG.warn("Skipping malformed RecipeForest tree bookmark", exception);
-                }
-            }
-            if (migrateLegacyBindings) {
+            if (schema != SCHEMA_VERSION && !preserveMalformedLegacyBindings) {
                 save();
             }
         } catch (Exception exception) {
@@ -553,16 +563,22 @@ public final class ForestBookmarks {
         settings.addProperty("boxEnabled", boxEnabled);
         settings.addProperty("stacksPerBox", stacksPerBox);
         root.add("settings", settings);
-        JsonArray searches = new JsonArray();
-        for (SearchBookmark bookmark : SEARCHES) {
-            searches.add(bookmark.query);
+        JsonArray bookmarks = new JsonArray();
+        for (EmiIngredient card : CARDS) {
+            JsonObject object;
+            if (card instanceof SearchBookmark search) {
+                object = new JsonObject();
+                object.addProperty("type", "search");
+                object.addProperty("query", search.query);
+            } else if (card instanceof TreeBookmark tree) {
+                object = tree.toJson();
+                object.addProperty("type", "tree");
+            } else {
+                continue;
+            }
+            bookmarks.add(object);
         }
-        root.add("searches", searches);
-        JsonArray trees = new JsonArray();
-        for (TreeBookmark bookmark : TREES) {
-            trees.add(bookmark.toJson());
-        }
-        root.add("trees", trees);
+        root.add("bookmarks", bookmarks);
 
         Path target = path();
         Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
@@ -594,6 +610,65 @@ public final class ForestBookmarks {
 
     private static JsonArray array(JsonObject object, String key) {
         return object.has(key) && object.get(key).isJsonArray() ? object.getAsJsonArray(key) : new JsonArray();
+    }
+
+    private static String stringValue(JsonObject object, String key, String fallback) {
+        return object.has(key) && object.get(key).isJsonPrimitive() ? object.get(key).getAsString() : fallback;
+    }
+
+    private static void loadOrderedBookmarks(JsonArray bookmarks) {
+        for (JsonElement element : bookmarks) {
+            try {
+                if (!element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject object = element.getAsJsonObject();
+                String type = stringValue(object, "type", "");
+                if ("search".equals(type)) {
+                    loadSearch(object.get("query"));
+                } else if ("tree".equals(type)) {
+                    loadTree(object);
+                }
+            } catch (RuntimeException exception) {
+                Constants.LOG.warn("Skipping malformed RecipeForest bookmark", exception);
+            }
+        }
+    }
+
+    private static void loadLegacyBookmarks(JsonObject root) {
+        for (JsonElement element : array(root, "searches")) {
+            loadSearch(element);
+        }
+        for (JsonElement element : array(root, "trees")) {
+            if (element.isJsonObject()) {
+                loadTree(element.getAsJsonObject());
+            }
+        }
+    }
+
+    private static void loadSearch(JsonElement element) {
+        try {
+            if (element == null || !element.isJsonPrimitive()) {
+                return;
+            }
+            String query = normalize(element.getAsString());
+            if (!query.isEmpty() && searches().stream().noneMatch(bookmark -> bookmark.query.equals(query))) {
+                CARDS.add(new SearchBookmark(query));
+            }
+        } catch (RuntimeException exception) {
+            Constants.LOG.warn("Skipping malformed RecipeForest search bookmark", exception);
+        }
+    }
+
+    private static void loadTree(JsonObject object) {
+        try {
+            TreeBookmark bookmark = TreeBookmark.fromJson(object);
+            if (!bookmark.roots.isEmpty()) {
+                CARDS.add(bookmark);
+            }
+        } catch (Exception exception) {
+            Constants.LOG.warn("Skipping invalid RecipeForest bookmark", exception);
+        }
     }
 
     private static List<ForestBinding> readForestBindings(JsonObject settings) {

@@ -116,6 +116,67 @@ class ForestBehaviorTest {
     }
 
     @Test
+    void savedCardsShareOnePersistentOrderAndMigrateLegacyLists() throws Exception {
+        Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
+        Class<?> ingredient = runtime.type("dev.emi.emi.api.stack.EmiIngredient");
+        Class<?> search = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$SearchBookmark");
+        Class<?> tree = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks$TreeBookmark");
+
+        Object first = call(bookmarks, "addSearch", types(String.class), "first search");
+        Object second = call(bookmarks, "addSearch", types(String.class), "second search");
+        call(manager, "add", types("dev.emi.emi.api.recipe.EmiRecipe"),
+                runtime.recipe("test:saved-order", runtime.stack("saved-order", 1), List.of()));
+        Object forest = call(bookmarks, "addTree", types(String.class), "Saved forest");
+
+        assertTrue((boolean) call(bookmarks, "move", types(ingredient, int.class), forest, 0));
+        assertTrue((boolean) call(bookmarks, "move", types(ingredient, int.class), first, 3));
+        Field iconField = search.getDeclaredField("ICON");
+        iconField.setAccessible(true);
+        Object unownedMatchingIcon = invoke(iconField.get(null), "copy", types());
+        assertFalse((boolean) call(bookmarks, "move", types(ingredient, int.class), unownedMatchingIcon, 0));
+        assertFalse((boolean) call(bookmarks, "remove", types(ingredient), unownedMatchingIcon));
+        List<?> cards = (List<?>) call(bookmarks, "cards", types());
+        assertSame(forest, cards.get(0));
+        assertSame(second, cards.get(1));
+        assertSame(first, cards.get(2));
+
+        call(bookmarks, "load", types());
+        cards = (List<?>) call(bookmarks, "cards", types());
+        assertEquals("Saved forest", call(tree, cards.get(0), "name", types()));
+        assertEquals("second search", call(search, cards.get(1), "query", types()));
+        assertEquals("first search", call(search, cards.get(2), "query", types()));
+
+        Method toJson = tree.getDeclaredMethod("toJson");
+        toJson.setAccessible(true);
+        Object legacyRoot = jsonObject();
+        addProperty(legacyRoot, "schema", 2);
+        jsonAdd(legacyRoot, "settings", jsonObject());
+        Object searches = jsonArray();
+        jsonArrayAdd(searches, jsonPrimitive("legacy one"));
+        jsonArrayAdd(searches, jsonPrimitive("legacy two"));
+        jsonAdd(legacyRoot, "searches", searches);
+        Object trees = jsonArray();
+        jsonArrayAdd(trees, toJson.invoke(cards.get(0)));
+        jsonAdd(legacyRoot, "trees", trees);
+        Path config = gameDirectory.resolve("config/emi_recipeforest.json");
+        Files.writeString(config, gsonString(legacyRoot));
+
+        call(bookmarks, "load", types());
+        cards = (List<?>) call(bookmarks, "cards", types());
+        assertEquals("legacy one", call(search, cards.get(0), "query", types()));
+        assertEquals("legacy two", call(search, cards.get(1), "query", types()));
+        assertEquals("Saved forest", call(tree, cards.get(2), "name", types()));
+        Field gsonValues = runtime.type("com.google.gson.Gson").getDeclaredField("VALUES");
+        gsonValues.setAccessible(true);
+        Object migratedRoot = ((Map<?, ?>) gsonValues.get(null)).get(Files.readString(config));
+        assertEquals(3, invoke(invoke(migratedRoot, "get", types(String.class), "schema"),
+                "getAsInt", types()));
+        assertTrue((boolean) invoke(migratedRoot, "has", types(String.class), "bookmarks"));
+        assertFalse((boolean) invoke(migratedRoot, "has", types(String.class), "searches"));
+        assertFalse((boolean) invoke(migratedRoot, "has", types(String.class), "trees"));
+    }
+
+    @Test
     void configSnapshotCountsAndRevertsRecipeForestChanges() throws Exception {
         Class<?> bookmarks = runtime.type("io.github.mango_clark.emirecipeforest.bookmark.ForestBookmarks");
         Object original = call(bookmarks, "captureConfigState", types());
@@ -693,7 +754,7 @@ class ForestBehaviorTest {
         Field gsonValues = runtime.type("com.google.gson.Gson").getDeclaredField("VALUES");
         gsonValues.setAccessible(true);
         Object migratedRoot = ((Map<?, ?>) gsonValues.get(null)).get(Files.readString(config));
-        assertEquals(2, invoke(invoke(migratedRoot, "get", types(String.class), "schema"),
+        assertEquals(3, invoke(invoke(migratedRoot, "get", types(String.class), "schema"),
                 "getAsInt", types()));
         Object migratedSettings = invoke(migratedRoot, "getAsJsonObject", types(String.class), "settings");
         assertFalse((boolean) invoke(migratedSettings, "has", types(String.class), "forestKeyCode"));
@@ -704,8 +765,10 @@ class ForestBehaviorTest {
                 "getAsInt", types()));
         assertFalse((boolean) invoke(invoke(migratedSettings, "get", types(String.class), "boxEnabled"),
                 "getAsBoolean", types()));
-        Object rewrittenSearches = invoke(migratedRoot, "getAsJsonArray", types(String.class), "searches");
-        assertEquals("legacy query", invoke(invoke(rewrittenSearches, "get", types(int.class), 0),
+        Object rewrittenCards = invoke(migratedRoot, "getAsJsonArray", types(String.class), "bookmarks");
+        Object rewrittenSearch = invoke(invoke(rewrittenCards, "get", types(int.class), 0),
+                "getAsJsonObject", types());
+        assertEquals("legacy query", invoke(invoke(rewrittenSearch, "get", types(String.class), "query"),
                 "getAsString", types()));
 
         Object brokenLegacyRoot = jsonObject();

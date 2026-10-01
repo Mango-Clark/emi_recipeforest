@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Detailed Recipe Forest settings now use an indented connector to distinguish their subgroup in EMI Config.
+- Saved searches and Recipe Forest snapshots now share one persistent card order, preserving existing bookmarks when upgrading.
 
 ## [0.1.0] - 2026-08-23
 
