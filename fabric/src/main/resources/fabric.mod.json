@@ -8,8 +8,7 @@
     "${mod_author}"
   ],
   "contact": {
-    "homepage": "https://fabricmc.net/",
-    "sources": "https://github.com/FabricMC/fabric-example-mod"
+    "sources": "https://github.com/Mango-Clark/emi_recipeforest"
   },
   "license": "${license}",
   "icon": "icon.png",
